@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+openai
+anthropic
+asyncpg
+pgvector
+pydantic-settings
+python-dotenv
+httpx
