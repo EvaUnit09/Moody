@@ -1,0 +1,16 @@
+# Secrets
+.env
+**/.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Generated data (regeneratable via scripts/fetch_movies.py, scripts/fetch_keywords.py)
+raw_movies.json
+movies_with_keywords.json
+backend/data/*.json
+
+# OS
+.DS_Store
