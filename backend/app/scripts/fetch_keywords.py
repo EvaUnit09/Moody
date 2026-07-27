@@ -1,17 +1,12 @@
 import asyncio
 import json
-import os
+from pathlib import Path
 
 import httpx
-from dotenv import load_dotenv
 
-load_dotenv()
-API_READ_TOKEN = os.getenv("API_READ_ACCESS_TOKEN")
+from app.services.tmdb import BASE_URL, HEADERS
 
-headers = {
-    "accept": "application/json",
-    "Authorization": f"Bearer {API_READ_TOKEN}",
-}
+DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 
 async def get_keywords_for_movie(
@@ -20,8 +15,8 @@ async def get_keywords_for_movie(
     async with semaphore:
         try:
             resp = await client.get(
-                f"https://api.themoviedb.org/3/movie/{movie_id}/keywords",
-                headers=headers,
+                f"{BASE_URL}/movie/{movie_id}/keywords",
+                headers=HEADERS,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -48,12 +43,12 @@ async def enrich_movies_with_keywords(movies: list[dict]) -> list[dict]:
 
 
 if __name__ == "__main__":
-    with open("raw_movies.json") as f:
+    with open(DATA_DIR / "raw_movies.json") as f:
         movies = json.load(f)
 
     enriched = asyncio.run(enrich_movies_with_keywords(movies))
 
-    with open("movies_with_keywords.json", "w") as f:
+    with open(DATA_DIR / "movies_with_keywords.json", "w") as f:
         json.dump(enriched, f, indent=2)
 
     print(f"Saved {len(enriched)} movies with keywords")
