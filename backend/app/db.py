@@ -1,0 +1,89 @@
+import datetime
+
+import asyncpg
+from pgvector.asyncpg import register_vector
+
+from app.config import settings
+
+_pool: asyncpg.Pool | None = None
+
+
+async def get_pool() -> asyncpg.Pool:
+    global _pool
+    if _pool is None:
+        _pool = await asyncpg.create_pool(
+            settings.supabase_db_url, init=register_vector
+        )
+    return _pool
+
+
+async def close_pool() -> None:
+    global _pool
+    if _pool is not None:
+        await _pool.close()
+        _pool = None
+
+
+async def search_similar(embedding: list[float], limit: int = 25) -> list[dict]:
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """
+        select tmdb_id, title, overview, genre_ids, keywords, poster_path,
+               embedding <=> $1 as distance
+        from movies
+        order by embedding <=> $1
+        limit $2
+        """,
+        embedding,
+        limit,
+    )
+    return [dict(row) for row in rows]
+
+
+async def upsert_movies(movies: list[dict], embeddings: list[list[float]]) -> None:
+    pool = await get_pool()
+    rows = [
+        (
+            movie["id"],
+            movie["title"],
+            movie.get("original_title"),
+            movie.get("original_language"),
+            movie.get("overview"),
+            movie.get("genre_ids", []),
+            movie.get("keywords", []),
+            movie.get("poster_path"),
+            movie.get("backdrop_path"),
+            datetime.date.fromisoformat(movie["release_date"]),
+            movie.get("popularity"),
+            movie.get("vote_average"),
+            movie.get("vote_count"),
+            embedding,
+        )
+        for movie, embedding in zip(movies, embeddings)
+    ]
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            """
+            insert into movies (
+                tmdb_id, title, original_title, original_language, overview,
+                genre_ids, keywords, poster_path, backdrop_path, release_date,
+                popularity, vote_average, vote_count, embedding
+            )
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            on conflict (tmdb_id) do update set
+                title = excluded.title,
+                original_title = excluded.original_title,
+                original_language = excluded.original_language,
+                overview = excluded.overview,
+                genre_ids = excluded.genre_ids,
+                keywords = excluded.keywords,
+                poster_path = excluded.poster_path,
+                backdrop_path = excluded.backdrop_path,
+                release_date = excluded.release_date,
+                popularity = excluded.popularity,
+                vote_average = excluded.vote_average,
+                vote_count = excluded.vote_count,
+                embedding = excluded.embedding
+            """,
+            rows,
+        )

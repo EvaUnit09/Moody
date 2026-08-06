@@ -2,6 +2,7 @@ import asyncio
 import json
 from pathlib import Path
 
+from app.db import close_pool, upsert_movies
 from app.services.embeddings import embed_batch
 from app.services.tmdb import genre_names
 
@@ -30,6 +31,11 @@ async def build_embeddings() -> None:
     print(f"Embedded {len(embeddings)} movies")
     print(f"Movies with empty keywords: {empty_keyword_count}")
     print(f"Average blob length: {avg_blob_length:.1f} chars")
+
+    await upsert_movies(movies, embeddings)
+    await close_pool()
+
+    print(f"Upserted {len(movies)} movies into Supabase")
 
 
 if __name__ == "__main__":
