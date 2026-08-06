@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     openai_api_key: str
     supabase_db_url: str
+    anthropic_api_key: str
 
 
 settings = Settings()
