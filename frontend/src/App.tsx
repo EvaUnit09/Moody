@@ -4,6 +4,7 @@ import { SearchBox } from "./components/SearchBox";
 import { ResultsGrid } from "./components/ResultsGrid";
 import { SkeletonGrid } from "./components/SkeletonGrid";
 import { PosterCarousel } from "./components/PosterCarousel";
+import { CarouselSkeleton } from "./components/CarouselSkeleton";
 import "./App.css";
 
 function getErrorMessage(error: unknown): string {
@@ -20,13 +21,15 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [popularMovies, setPopularMovies] = useState<Movie[]>([]);
+  const [isPopularLoading, setIsPopularLoading] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
     getPopular()
       .then(setPopularMovies)
-      .catch(() => setPopularMovies([]));
+      .catch(() => setPopularMovies([]))
+      .finally(() => setIsPopularLoading(false));
   }, []);
 
   useEffect(() => {
@@ -76,7 +79,10 @@ function App() {
         <SearchBox onSearch={handleSearch} isLoading={isLoading} />
       </section>
 
-      {!hasSearched && <PosterCarousel movies={popularMovies} />}
+      {!hasSearched && isPopularLoading && <CarouselSkeleton />}
+      {!hasSearched && !isPopularLoading && (
+        <PosterCarousel movies={popularMovies} />
+      )}
 
       {hasSearched && (
         <section className="results-section">
