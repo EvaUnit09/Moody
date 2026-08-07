@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Movie } from "../api";
 import { MovieCard } from "./MovieCard";
 
@@ -12,7 +12,9 @@ interface PosterCarouselProps {
 
 export function PosterCarousel({ movies }: PosterCarouselProps) {
   const trackRef = useRef<HTMLDivElement>(null);
-  const isPausedRef = useRef(false);
+  const isHoveredRef = useRef(false);
+  const cooldownUntilRef = useRef(0);
+  const [progress, setProgress] = useState(0);
 
   function scrollByStep(direction: 1 | -1) {
     const track = trackRef.current;
@@ -32,13 +34,38 @@ export function PosterCarousel({ movies }: PosterCarouselProps) {
     track.scrollBy({ left: track.clientWidth * SCROLL_STEP_RATIO * direction, behavior: "smooth" });
   }
 
+  function handleManualNav(direction: 1 | -1) {
+    cooldownUntilRef.current = Date.now() + AUTO_ROTATE_INTERVAL_MS;
+    scrollByStep(direction);
+  }
+
   useEffect(() => {
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (prefersReducedMotion) return;
+
     const timer = setInterval(() => {
-      if (!isPausedRef.current) {
+      if (!isHoveredRef.current && Date.now() >= cooldownUntilRef.current) {
         scrollByStep(1);
       }
     }, AUTO_ROTATE_INTERVAL_MS);
     return () => clearInterval(timer);
+  }, [movies]);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+
+    function updateProgress() {
+      if (!track) return;
+      const max = track.scrollWidth - track.clientWidth;
+      setProgress(max > 0 ? track.scrollLeft / max : 0);
+    }
+
+    updateProgress();
+    track.addEventListener("scroll", updateProgress, { passive: true });
+    return () => track.removeEventListener("scroll", updateProgress);
   }, [movies]);
 
   if (movies.length === 0) {
@@ -49,10 +76,10 @@ export function PosterCarousel({ movies }: PosterCarouselProps) {
     <section
       className="carousel"
       onMouseEnter={() => {
-        isPausedRef.current = true;
+        isHoveredRef.current = true;
       }}
       onMouseLeave={() => {
-        isPausedRef.current = false;
+        isHoveredRef.current = false;
       }}
     >
       <div className="results-heading">
@@ -64,7 +91,7 @@ export function PosterCarousel({ movies }: PosterCarouselProps) {
           type="button"
           className="btn btn-icon btn-secondary carousel-arrow carousel-arrow-prev"
           aria-label="Scroll left"
-          onClick={() => scrollByStep(-1)}
+          onClick={() => handleManualNav(-1)}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 18l-6-6 6-6" />
@@ -83,12 +110,19 @@ export function PosterCarousel({ movies }: PosterCarouselProps) {
           type="button"
           className="btn btn-icon btn-secondary carousel-arrow carousel-arrow-next"
           aria-label="Scroll right"
-          onClick={() => scrollByStep(1)}
+          onClick={() => handleManualNav(1)}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 18l6-6-6-6" />
           </svg>
         </button>
+      </div>
+
+      <div className="carousel-progress-track">
+        <div
+          className="carousel-progress-bar"
+          style={{ width: `${progress * 100}%` }}
+        />
       </div>
     </section>
   );

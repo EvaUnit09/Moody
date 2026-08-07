@@ -4,6 +4,7 @@ import asyncpg
 from pgvector.asyncpg import register_vector
 
 from app.config import settings
+from app.services.tmdb import genre_names
 
 _pool: asyncpg.Pool | None = None
 
@@ -24,6 +25,15 @@ async def close_pool() -> None:
         _pool = None
 
 
+def _with_genres(rows: list[asyncpg.Record]) -> list[dict]:
+    movies = []
+    for row in rows:
+        movie = dict(row)
+        movie["genres"] = genre_names(movie.pop("genre_ids", []))
+        movies.append(movie)
+    return movies
+
+
 async def search_similar(embedding: list[float], limit: int = 25) -> list[dict]:
     pool = await get_pool()
     rows = await pool.fetch(
@@ -38,14 +48,14 @@ async def search_similar(embedding: list[float], limit: int = 25) -> list[dict]:
         embedding,
         limit,
     )
-    return [dict(row) for row in rows]
+    return _with_genres(rows)
 
 
 async def get_popular_movies(limit: int = 15) -> list[dict]:
     pool = await get_pool()
     rows = await pool.fetch(
         """
-        select tmdb_id, title, poster_path,
+        select tmdb_id, title, poster_path, genre_ids,
                extract(year from release_date)::int as year, vote_average
         from movies
         where vote_count >= 100
@@ -54,7 +64,7 @@ async def get_popular_movies(limit: int = 15) -> list[dict]:
         """,
         limit,
     )
-    return [dict(row) for row in rows]
+    return _with_genres(rows)
 
 
 UPSERT_BATCH_SIZE = 1000

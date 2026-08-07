@@ -125,6 +125,20 @@
 .movie-card {
   padding: 0;
   overflow: hidden;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.movie-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 1px var(--color-accent-700),
+    0 8px 24px -8px var(--color-accent-900);
+}
+
+.movie-card-poster-link {
+  display: block;
 }
 
 .movie-card-poster {
@@ -132,6 +146,14 @@
   aspect-ratio: 2 / 3;
   display: block;
   object-fit: cover;
+}
+
+img.movie-card-poster {
+  transition: opacity 0.3s ease;
+}
+
+img.movie-card-poster:not(.movie-card-poster-loaded) {
+  opacity: 0;
 }
 
 .movie-card-poster-placeholder {
@@ -145,6 +167,13 @@
 
 .movie-card-body {
   padding: var(--space-3);
+}
+
+.movie-card-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 6px 0;
 }
 
 .movie-card-meta {
@@ -215,6 +244,37 @@
   scroll-snap-align: start;
 }
 
+.carousel-progress-track {
+  height: 2px;
+  background: var(--color-divider);
+  margin-top: var(--space-4);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.carousel-progress-bar {
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 0.15s ease;
+}
+
+.search-box-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.search-box-chip {
+  cursor: pointer;
+  background: transparent;
+  font: inherit;
+}
+
+.search-box-chip:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
 @media (max-width: 720px) {
   .results-grid {
     grid-template-columns: 1fr;
@@ -222,5 +282,16 @@
 
   .carousel-item {
     flex-basis: 200px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

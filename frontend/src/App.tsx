@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getPopular, recommend, type Movie, type MovieRecommendation } from "./api";
 import { SearchBox } from "./components/SearchBox";
 import { ResultsGrid } from "./components/ResultsGrid";
@@ -20,6 +20,8 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [popularMovies, setPopularMovies] = useState<Movie[]>([]);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     getPopular()
@@ -27,20 +29,39 @@ function App() {
       .catch(() => setPopularMovies([]));
   }, []);
 
+  useEffect(() => {
+    const initialQuery = new URLSearchParams(window.location.search).get("q");
+    if (initialQuery) {
+      handleSearch(initialQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleSearch(searchQuery: string) {
     setQuery(searchQuery);
     setIsLoading(true);
     setError(null);
     setHasSearched(true);
+    window.history.pushState(null, "", `?q=${encodeURIComponent(searchQuery)}`);
+
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const requestId = ++requestIdRef.current;
 
     try {
-      const movies = await recommend(searchQuery);
+      const movies = await recommend(searchQuery, controller.signal);
+      if (requestIdRef.current !== requestId) return;
       setResults(movies);
     } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      if (requestIdRef.current !== requestId) return;
       setError(getErrorMessage(err));
       setResults([]);
     } finally {
-      setIsLoading(false);
+      if (requestIdRef.current === requestId) {
+        setIsLoading(false);
+      }
     }
   }
 

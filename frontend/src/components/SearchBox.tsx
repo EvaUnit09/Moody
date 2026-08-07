@@ -33,6 +33,11 @@ export function SearchBox({ onSearch, isLoading }: SearchBoxProps) {
     }
   }
 
+  function handleChipClick(example: string) {
+    setQuery(example);
+    onSearch(example);
+  }
+
   return (
     <form className="search-box" onSubmit={handleSubmit}>
       <div className="tag tag-outline search-box-tag">mood, not genre</div>
@@ -70,6 +75,25 @@ export function SearchBox({ onSearch, isLoading }: SearchBoxProps) {
           </svg>
         </button>
       </div>
+
+      {!query && (
+        <div className="search-box-chips">
+          {PLACEHOLDERS.map((example) => {
+            const label = example.replace(/\.\.\.$/, "");
+            return (
+              <button
+                key={example}
+                type="button"
+                className="tag tag-outline search-box-chip"
+                disabled={isLoading}
+                onClick={() => handleChipClick(label)}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </form>
   );
 }

@@ -6,6 +6,7 @@ export interface Movie {
   poster_path: string | null;
   year: number | null;
   vote_average: number | null;
+  genres: string[];
 }
 
 export interface MovieRecommendation extends Movie {
@@ -23,11 +24,15 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
-export async function recommend(query: string): Promise<MovieRecommendation[]> {
+export async function recommend(
+  query: string,
+  signal?: AbortSignal,
+): Promise<MovieRecommendation[]> {
   const data = await apiFetch<{ results: MovieRecommendation[] }>("/recommend", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query }),
+    signal,
   });
   return data.results;
 }

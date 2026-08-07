@@ -11,6 +11,7 @@ class MovieBase(BaseModel):
     poster_path: str | None
     year: int | None
     vote_average: float | None
+    genres: list[str]
 
 
 class MovieRecommendation(MovieBase):
