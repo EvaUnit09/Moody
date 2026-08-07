@@ -3,7 +3,6 @@ import { recommend, type MovieRecommendation } from "./api";
 import { SearchBox } from "./components/SearchBox";
 import { ResultsGrid } from "./components/ResultsGrid";
 import { SkeletonGrid } from "./components/SkeletonGrid";
-import { Explainer } from "./components/Explainer";
 import "./App.css";
 
 function getErrorMessage(error: unknown): string {
@@ -69,8 +68,6 @@ function App() {
           {!isLoading && !error && <ResultsGrid results={results} />}
         </section>
       )}
-
-      <Explainer />
     </div>
   );
 }
