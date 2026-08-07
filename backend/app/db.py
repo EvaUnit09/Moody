@@ -29,6 +29,7 @@ async def search_similar(embedding: list[float], limit: int = 25) -> list[dict]:
     rows = await pool.fetch(
         """
         select tmdb_id, title, overview, genre_ids, keywords, poster_path,
+               extract(year from release_date)::int as year, vote_average,
                embedding <=> $1 as distance
         from movies
         order by embedding <=> $1

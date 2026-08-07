@@ -87,7 +87,6 @@ vectors and prints a summary (count embedded, count with empty keyword lists,
 average blob length) with no unhandled exceptions.
 
 ---
-
 > **Manual checkpoint — Supabase account**: sign up at supabase.com, create a
 > project, enable the pgvector extension (Database → Extensions → "vector"), and
 > capture `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, and `SUPABASE_DB_URL` (session

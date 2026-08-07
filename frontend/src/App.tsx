@@ -2,6 +2,8 @@ import { useState } from "react";
 import { recommend, type MovieRecommendation } from "./api";
 import { SearchBox } from "./components/SearchBox";
 import { ResultsGrid } from "./components/ResultsGrid";
+import { SkeletonGrid } from "./components/SkeletonGrid";
+import { Explainer } from "./components/Explainer";
 import "./App.css";
 
 function getErrorMessage(error: unknown): string {
@@ -12,18 +14,20 @@ function getErrorMessage(error: unknown): string {
 }
 
 function App() {
+  const [query, setQuery] = useState("");
   const [results, setResults] = useState<MovieRecommendation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
-  async function handleSearch(query: string) {
+  async function handleSearch(searchQuery: string) {
+    setQuery(searchQuery);
     setIsLoading(true);
     setError(null);
     setHasSearched(true);
 
     try {
-      const movies = await recommend(query);
+      const movies = await recommend(searchQuery);
       setResults(movies);
     } catch (err: unknown) {
       setError(getErrorMessage(err));
@@ -34,23 +38,39 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <h1>What do you want to watch?</h1>
-      <p className="tagline">
-        Describe a mood or scenario. Skip the genre dropdowns.
-      </p>
+    <div className="app-bg">
+      <header className="nav app-header">
+        <span className="app-logo-dot" />
+        <span className="nav-brand">MovieRec</span>
+      </header>
 
-      <SearchBox onSearch={handleSearch} isLoading={isLoading} />
+      <section className="hero">
+        <SearchBox onSearch={handleSearch} isLoading={isLoading} />
+      </section>
 
-      {error && <p className="error">{error}</p>}
+      {hasSearched && (
+        <section className="results-section">
+          {!error && (
+            <div className="results-heading">
+              <h6 className="text-muted">matches for &ldquo;{query}&rdquo;</h6>
+            </div>
+          )}
 
-      {isLoading && <p className="status">Finding picks for you...</p>}
+          {error && <p className="error">{error}</p>}
 
-      {!isLoading && !error && hasSearched && results.length === 0 && (
-        <p className="status">No matches found. Try describing it differently.</p>
+          {isLoading && <SkeletonGrid />}
+
+          {!isLoading && !error && results.length === 0 && (
+            <p className="status">
+              No matches found. Try describing it differently.
+            </p>
+          )}
+
+          {!isLoading && !error && <ResultsGrid results={results} />}
+        </section>
       )}
 
-      <ResultsGrid results={results} />
+      <Explainer />
     </div>
   );
 }
