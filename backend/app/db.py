@@ -41,6 +41,22 @@ async def search_similar(embedding: list[float], limit: int = 25) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+async def get_popular_movies(limit: int = 15) -> list[dict]:
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """
+        select tmdb_id, title, poster_path,
+               extract(year from release_date)::int as year, vote_average
+        from movies
+        where vote_count >= 100
+        order by popularity desc
+        limit $1
+        """,
+        limit,
+    )
+    return [dict(row) for row in rows]
+
+
 UPSERT_BATCH_SIZE = 1000
 
 _UPSERT_SQL = """

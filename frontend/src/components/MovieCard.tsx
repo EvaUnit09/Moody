@@ -1,9 +1,9 @@
-import type { MovieRecommendation } from "../api";
+import type { Movie } from "../api";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
 
 interface MovieCardProps {
-  movie: MovieRecommendation;
+  movie: Movie & { reason?: string };
 }
 
 export function MovieCard({ movie }: MovieCardProps) {
@@ -24,7 +24,7 @@ export function MovieCard({ movie }: MovieCardProps) {
       <div className="movie-card-body">
         {movie.year && <div className="card-kicker">{movie.year}</div>}
         <div className="card-title">{movie.title}</div>
-        <p className="card-body">{movie.reason}</p>
+        {movie.reason && <p className="card-body">{movie.reason}</p>}
         {movie.vote_average != null && (
           <div className="card-meta movie-card-meta">
             <span>

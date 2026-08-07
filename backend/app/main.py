@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import close_pool, get_pool
+from app.routers.popular import router as popular_router
 from app.routers.recommend import router as recommend_router
 
 DEV_ORIGINS = [
@@ -29,6 +30,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(recommend_router)
+app.include_router(popular_router)
 
 
 @app.get("/health")

@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { recommend, type MovieRecommendation } from "./api";
+import { useEffect, useState } from "react";
+import { getPopular, recommend, type Movie, type MovieRecommendation } from "./api";
 import { SearchBox } from "./components/SearchBox";
 import { ResultsGrid } from "./components/ResultsGrid";
 import { SkeletonGrid } from "./components/SkeletonGrid";
+import { PosterCarousel } from "./components/PosterCarousel";
 import "./App.css";
 
 function getErrorMessage(error: unknown): string {
@@ -18,6 +19,13 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [popularMovies, setPopularMovies] = useState<Movie[]>([]);
+
+  useEffect(() => {
+    getPopular()
+      .then(setPopularMovies)
+      .catch(() => setPopularMovies([]));
+  }, []);
 
   async function handleSearch(searchQuery: string) {
     setQuery(searchQuery);
@@ -46,6 +54,8 @@ function App() {
       <section className="hero">
         <SearchBox onSearch={handleSearch} isLoading={isLoading} />
       </section>
+
+      {!hasSearched && <PosterCarousel movies={popularMovies} />}
 
       {hasSearched && (
         <section className="results-section">

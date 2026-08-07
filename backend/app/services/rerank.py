@@ -3,7 +3,7 @@ from anthropic import AsyncAnthropic
 from app.config import settings
 
 RERANK_MODEL = "claude-haiku-4-5"
-TOP_N = 5
+TOP_N = 6
 
 client = AsyncAnthropic(api_key=settings.anthropic_api_key)
 
