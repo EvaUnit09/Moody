@@ -41,7 +41,7 @@ function App() {
     <div className="app-bg">
       <header className="nav app-header">
         <span className="app-logo-dot" />
-        <span className="nav-brand">MovieRec</span>
+        <span className="nav-brand">Moody</span>
       </header>
 
       <section className="hero">
