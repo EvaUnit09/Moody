@@ -40,6 +40,32 @@ async def search_similar(embedding: list[float], limit: int = 25) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+UPSERT_BATCH_SIZE = 1000
+
+_UPSERT_SQL = """
+    insert into movies (
+        tmdb_id, title, original_title, original_language, overview,
+        genre_ids, keywords, poster_path, backdrop_path, release_date,
+        popularity, vote_average, vote_count, embedding
+    )
+    values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    on conflict (tmdb_id) do update set
+        title = excluded.title,
+        original_title = excluded.original_title,
+        original_language = excluded.original_language,
+        overview = excluded.overview,
+        genre_ids = excluded.genre_ids,
+        keywords = excluded.keywords,
+        poster_path = excluded.poster_path,
+        backdrop_path = excluded.backdrop_path,
+        release_date = excluded.release_date,
+        popularity = excluded.popularity,
+        vote_average = excluded.vote_average,
+        vote_count = excluded.vote_count,
+        embedding = excluded.embedding
+"""
+
+
 async def upsert_movies(movies: list[dict], embeddings: list[list[float]]) -> None:
     pool = await get_pool()
     rows = [
@@ -62,28 +88,7 @@ async def upsert_movies(movies: list[dict], embeddings: list[list[float]]) -> No
         for movie, embedding in zip(movies, embeddings)
     ]
     async with pool.acquire() as conn:
-        await conn.executemany(
-            """
-            insert into movies (
-                tmdb_id, title, original_title, original_language, overview,
-                genre_ids, keywords, poster_path, backdrop_path, release_date,
-                popularity, vote_average, vote_count, embedding
-            )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-            on conflict (tmdb_id) do update set
-                title = excluded.title,
-                original_title = excluded.original_title,
-                original_language = excluded.original_language,
-                overview = excluded.overview,
-                genre_ids = excluded.genre_ids,
-                keywords = excluded.keywords,
-                poster_path = excluded.poster_path,
-                backdrop_path = excluded.backdrop_path,
-                release_date = excluded.release_date,
-                popularity = excluded.popularity,
-                vote_average = excluded.vote_average,
-                vote_count = excluded.vote_count,
-                embedding = excluded.embedding
-            """,
-            rows,
-        )
+        for i in range(0, len(rows), UPSERT_BATCH_SIZE):
+            batch = rows[i : i + UPSERT_BATCH_SIZE]
+            await conn.executemany(_UPSERT_SQL, batch)
+            print(f"Upserted {min(i + UPSERT_BATCH_SIZE, len(rows))}/{len(rows)} movies")

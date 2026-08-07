@@ -4,6 +4,7 @@ from app.config import settings
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 BATCH_SIZE = 100
+PROGRESS_INTERVAL = 1000
 
 client = AsyncOpenAI(api_key=settings.openai_api_key)
 
@@ -19,4 +20,6 @@ async def embed_batch(texts: list[str]) -> list[list[float]]:
         chunk = texts[i : i + BATCH_SIZE]
         response = await client.embeddings.create(model=EMBEDDING_MODEL, input=chunk)
         embeddings.extend(item.embedding for item in response.data)
+        if len(embeddings) % PROGRESS_INTERVAL == 0 or len(embeddings) == len(texts):
+            print(f"Embedded {len(embeddings)}/{len(texts)} movies")
     return embeddings
