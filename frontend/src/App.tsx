@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getPopular, recommend, type Movie, type MovieRecommendation } from "./api";
+import { readPopularCache, writePopularCache } from "./lib/popularCache";
 import { SearchBox } from "./components/SearchBox";
 import { ResultsGrid } from "./components/ResultsGrid";
 import { SkeletonGrid } from "./components/SkeletonGrid";
@@ -20,15 +21,25 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
-  const [popularMovies, setPopularMovies] = useState<Movie[]>([]);
-  const [isPopularLoading, setIsPopularLoading] = useState(true);
+  const [popularMovies, setPopularMovies] = useState<Movie[]>(
+    () => readPopularCache() ?? [],
+  );
+  const [isPopularLoading, setIsPopularLoading] = useState(
+    () => readPopularCache() === null,
+  );
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
+    const hadCachedMovies = readPopularCache() !== null;
     getPopular()
-      .then(setPopularMovies)
-      .catch(() => setPopularMovies([]))
+      .then((movies) => {
+        setPopularMovies(movies);
+        writePopularCache(movies);
+      })
+      .catch(() => {
+        if (!hadCachedMovies) setPopularMovies([]);
+      })
       .finally(() => setIsPopularLoading(false));
   }, []);
 

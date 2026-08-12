@@ -7,5 +7,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
+    // Node's built-in experimental `localStorage` global shadows jsdom's
+    // window.localStorage in newer Node versions unless disabled here.
+    env: { NODE_OPTIONS: '--no-experimental-webstorage' },
   },
 })
