@@ -6,7 +6,7 @@ from app.models import PopularResponse
 
 router = APIRouter()
 
-POPULAR_LIMIT = 15
+POPULAR_LIMIT = 16
 POPULAR_CACHE_KEY = "__popular__"
 
 
