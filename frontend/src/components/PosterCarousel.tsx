@@ -3,7 +3,6 @@ import type { Movie } from "../api";
 import { MovieCard } from "./MovieCard";
 
 const AUTO_ROTATE_INTERVAL_MS = 4000;
-const SCROLL_STEP_RATIO = 0.9;
 const EDGE_THRESHOLD_PX = 4;
 
 interface PosterCarouselProps {
@@ -31,7 +30,7 @@ export function PosterCarousel({ movies }: PosterCarouselProps) {
       track.scrollTo({ left: track.scrollWidth, behavior: "smooth" });
       return;
     }
-    track.scrollBy({ left: track.clientWidth * SCROLL_STEP_RATIO * direction, behavior: "smooth" });
+    track.scrollBy({ left: track.clientWidth * direction, behavior: "smooth" });
   }
 
   function handleManualNav(direction: 1 | -1) {
