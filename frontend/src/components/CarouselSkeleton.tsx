@@ -4,7 +4,7 @@ export function CarouselSkeleton() {
   return (
     <section className="carousel">
       <div className="results-heading">
-        <h6 className="text-muted">popular right now</h6>
+        <h6 className="text-muted">popular right now!</h6>
       </div>
 
       <div className="carousel-viewport">
