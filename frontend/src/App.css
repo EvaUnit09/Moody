@@ -240,7 +240,7 @@ img.movie-card-poster:not(.movie-card-poster-loaded) {
 }
 
 .carousel-item {
-  flex: 0 0 280px;
+  flex: 0 0 calc((100% - 3 * var(--space-6)) / 4);
   scroll-snap-align: start;
 }
 
@@ -278,12 +278,6 @@ img.movie-card-poster:not(.movie-card-poster-loaded) {
 @media (max-width: 720px) {
   .results-grid {
     grid-template-columns: 1fr;
-  }
-
-  .carousel-item {
-    flex-basis: 200px;
-    flex: 0 0 calc((100% - 3 * var(--space-6)) / 4);
-    scroll-snap-align:  start;
   }
 }
 
