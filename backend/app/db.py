@@ -4,7 +4,7 @@ import asyncpg
 from pgvector.asyncpg import register_vector
 
 from app.config import settings
-from app.services.tmdb import genre_names
+from app.services.tmdb import MIN_VOTE_AVERAGE, genre_names
 
 _pool: asyncpg.Pool | None = None
 
@@ -42,11 +42,13 @@ async def search_similar(embedding: list[float], limit: int = 25) -> list[dict]:
                extract(year from release_date)::int as year, vote_average,
                embedding <=> $1 as distance
         from movies
+        where vote_average >= $3
         order by embedding <=> $1
         limit $2
         """,
         embedding,
         limit,
+        MIN_VOTE_AVERAGE,
     )
     return _with_genres(rows)
 
@@ -58,11 +60,12 @@ async def get_popular_movies(limit: int = 15) -> list[dict]:
         select tmdb_id, title, poster_path, genre_ids,
                extract(year from release_date)::int as year, vote_average
         from movies
-        where vote_count >= 100
+        where vote_count >= 100 and vote_average >= $2
         order by popularity desc
         limit $1
         """,
         limit,
+        MIN_VOTE_AVERAGE,
     )
     return _with_genres(rows)
 

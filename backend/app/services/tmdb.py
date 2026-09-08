@@ -12,6 +12,8 @@ HEADERS = {
     "Authorization": f"Bearer {API_READ_TOKEN}",
 }
 
+MIN_VOTE_AVERAGE = 5.0
+
 GENRE_MAP: dict[int, str] = {
     28: "Action",
     12: "Adventure",
