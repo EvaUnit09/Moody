@@ -6,7 +6,7 @@ from pathlib import Path
 
 import httpx
 
-from app.services.tmdb import BASE_URL, HEADERS
+from app.services.tmdb import BASE_URL, HEADERS, MIN_VOTE_AVERAGE
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
@@ -42,6 +42,7 @@ async def fetch_year_page(
             "sort_by": "popularity.desc",
             "primary_release_year": year,
             "vote_count.gte": VOTE_COUNT_MIN,
+            "vote_average.gte": MIN_VOTE_AVERAGE,
             "include_adult": "false",
             "page": page,
         }
