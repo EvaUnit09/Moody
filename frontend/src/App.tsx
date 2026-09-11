@@ -51,6 +51,15 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function handleGoHome() {
+    abortControllerRef.current?.abort();
+    setQuery("");
+    setResults([]);
+    setError(null);
+    setHasSearched(false);
+    window.history.pushState(null, "", window.location.pathname);
+  }
+
   async function handleSearch(searchQuery: string) {
     setQuery(searchQuery);
     setIsLoading(true);
@@ -82,8 +91,10 @@ function App() {
   return (
     <div className="app-bg">
       <header className="nav app-header">
-        <span className="app-logo-dot" />
-        <span className="nav-brand">Moody</span>
+        <button type="button" className="nav-brand" onClick={handleGoHome}>
+          <span className="app-logo-dot" />
+          <span>Moody</span>
+        </button>
       </header>
 
       <section className="hero">
