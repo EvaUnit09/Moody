@@ -11,6 +11,15 @@ class Settings(BaseSettings):
         "http://localhost:5173,http://127.0.0.1:5173,"
         "http://localhost:5174,http://127.0.0.1:5174"
     )
+    
+    dd_api_key: str | None = None
+    dd_service: str = "movie-rec-backend"
+    dd_env: str = "dev"
+    dd_version: str | None = None
+    # Only enable tracing when explicitly requested AND ddtrace is available
+    # This prevents agent connection attempts when disabled
+    dd_trace_enabled: bool = False
+    dd_trace_agent_url: str | None = None  # Override agent URL (for local development with agent)
 
     @property
     def allowed_origins_list(self) -> list[str]:

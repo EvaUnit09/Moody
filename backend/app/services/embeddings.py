@@ -1,6 +1,7 @@
 from openai import AsyncOpenAI
 
 from app.config import settings
+from app.services.observability import DatadogObservability
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 BATCH_SIZE = 100
@@ -9,6 +10,7 @@ PROGRESS_INTERVAL = 1000
 client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 
+@DatadogObservability.trace_embedding
 async def embed_text(text: str) -> list[float]:
     response = await client.embeddings.create(model=EMBEDDING_MODEL, input=text)
     return response.data[0].embedding

@@ -5,6 +5,7 @@ from pgvector.asyncpg import register_vector
 
 from app.config import settings
 from app.services.tmdb import MIN_VOTE_AVERAGE, genre_names
+from app.services.observability import DatadogObservability
 
 _pool: asyncpg.Pool | None = None
 
@@ -34,6 +35,7 @@ def _with_genres(rows: list[asyncpg.Record]) -> list[dict]:
     return movies
 
 
+@DatadogObservability.trace_vector_search
 async def search_similar(embedding: list[float], limit: int = 25) -> list[dict]:
     pool = await get_pool()
     rows = await pool.fetch(
