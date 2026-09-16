@@ -8,12 +8,19 @@ plus LLM Observability integration for tracking token usage and costs.
 from typing import Any, Callable, TypeVar
 from functools import wraps
 
-from ddtrace import tracer
-from ddtrace.llmobs import LLMObs
-
 from app.config import settings
 
 T = TypeVar("T")
+
+# Optional ddtrace imports - gracefully handle missing dependency
+try:
+    from ddtrace import tracer
+    from ddtrace.llmobs import LLMObs
+    DDTRACE_AVAILABLE = True
+except ImportError:
+    tracer = None
+    LLMObs = None
+    DDTRACE_AVAILABLE = False
 
 
 class DatadogObservability:
@@ -25,6 +32,10 @@ class DatadogObservability:
     def initialize() -> None:
         """Initialize Datadog LLM Observability. Call once at startup."""
         if DatadogObservability._initialized or not settings.dd_trace_enabled:
+            return
+
+        if not DDTRACE_AVAILABLE:
+            print("[Datadog] ddtrace not installed, observability disabled")
             return
 
         if settings.dd_api_key:
@@ -48,7 +59,7 @@ class DatadogObservability:
         """Decorator to trace embedding calls with custom span."""
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
-            if not settings.dd_trace_enabled:
+            if not settings.dd_trace_enabled or not DDTRACE_AVAILABLE:
                 return await func(*args, **kwargs)
 
             with tracer.trace(
@@ -77,7 +88,7 @@ class DatadogObservability:
         """Decorator to trace vector similarity search with custom span."""
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
-            if not settings.dd_trace_enabled:
+            if not settings.dd_trace_enabled or not DDTRACE_AVAILABLE:
                 return await func(*args, **kwargs)
 
             with tracer.trace(
@@ -107,7 +118,7 @@ class DatadogObservability:
         """Decorator to trace LLM reranking with LLM Observability."""
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
-            if not settings.dd_trace_enabled:
+            if not settings.dd_trace_enabled or not DDTRACE_AVAILABLE:
                 return await func(*args, **kwargs)
 
             with tracer.trace(
