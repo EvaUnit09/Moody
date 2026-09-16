@@ -9,6 +9,7 @@ from app.db import close_pool, get_pool
 from app.routers.popular import router as popular_router
 from app.routers.popular import warm_popular_cache
 from app.routers.recommend import router as recommend_router
+from app.services.observability import DatadogObservability
 
 POPULAR_CACHE_REFRESH_SECONDS = 3300  # keep the cache warm ahead of its 3600s TTL
 
@@ -21,6 +22,9 @@ async def _refresh_popular_cache_periodically() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize Datadog observability
+    DatadogObservability.initialize()
+    
     await get_pool()
     await warm_popular_cache()
     refresh_task = asyncio.create_task(_refresh_popular_cache_periodically())
