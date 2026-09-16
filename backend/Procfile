@@ -1,1 +1,1 @@
-web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+web: if [ "$DD_TRACE_ENABLED" = "true" ] && [ -n "$DD_API_KEY" ]; then ddtrace-run uvicorn app.main:app --host 0.0.0.0 --port $PORT; else uvicorn app.main:app --host 0.0.0.0 --port $PORT; fi

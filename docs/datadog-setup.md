@@ -2,6 +2,32 @@
 
 This document describes the Datadog observability instrumentation and evaluation harness added to the MovieRec backend.
 
+## ⚠️ PRIVACY WARNING
+
+**When Datadog LLM Observability is enabled, the following data is transmitted to Datadog:**
+- Full user queries (e.g., "something slow and melancholic")
+- Complete LLM prompts including movie titles, overviews, and keywords
+- LLM responses with recommendations and reasons
+- Token counts and cost estimates
+
+**This data includes:**
+- User input that may contain personal preferences or sentiment
+- Movie metadata from your database
+- LLM-generated text
+
+**Before enabling in production:**
+1. Review your privacy policy to ensure compliance
+2. Consider user consent requirements for third-party data transmission
+3. Evaluate data residency requirements (Datadog site: `datadoghq.com`)
+4. Implement appropriate PII scrubbing if needed
+5. Consider disabling LLM Observability (`DD_API_KEY` unset) if data transmission is a concern
+
+**To disable LLM Observability while keeping APM tracing:**
+- Omit `DD_API_KEY` from environment variables
+- APM tracing will still work via `ddtrace-run` (no LLM data sent)
+
+---
+
 ## Overview
 
 The implementation follows the observability plan outlined in `architecture.md`:

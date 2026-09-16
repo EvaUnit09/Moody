@@ -30,14 +30,67 @@ class DatadogObservability:
 
     @staticmethod
     def initialize() -> None:
-        """Initialize Datadog LLM Observability. Call once at startup."""
-        if DatadogObservability._initialized or not settings.dd_trace_enabled:
+        """Initialize Datadog LLM Observability and configure trace filtering."""
+        if DatadogObservability._initialized:
+            return
+
+        if not settings.dd_trace_enabled:
+            print("[Datadog] DD_TRACE_ENABLED=false, observability disabled")
             return
 
         if not DDTRACE_AVAILABLE:
             print("[Datadog] ddtrace not installed, observability disabled")
             return
 
+        # Configure tracer to use agentless mode or custom agent URL
+        try:
+            tracer_config = {}
+            
+            # If using agentless mode (DD_API_KEY set), disable agent
+            if settings.dd_api_key:
+                tracer_config["enabled"] = False  # Disable agent-based tracing, use LLMObs only
+                print("[Datadog] Using agentless mode (LLM Observability only)")
+            elif settings.dd_trace_agent_url:
+                # Custom agent URL for local development
+                tracer_config["agent_url"] = settings.dd_trace_agent_url
+                print(f"[Datadog] Using custom agent URL: {settings.dd_trace_agent_url}")
+            else:
+                # No API key and no agent URL = disable to prevent connection attempts
+                print("[Datadog] No DD_API_KEY or DD_TRACE_AGENT_URL, disabling to prevent agent connection")
+                return
+            
+            # Configure trace filtering to only trace /recommend endpoint
+            from ddtrace.filters import TraceFilter
+            
+            class RecommendOnlyFilter(TraceFilter):
+                """Filter to only keep traces for /recommend endpoint."""
+                
+                def process_trace(self, trace):
+                    if not trace:
+                        return trace
+                    
+                    # Check the root span for the HTTP path
+                    root_span = trace[0] if trace else None
+                    if root_span:
+                        http_url = root_span.get_tag("http.url") or ""
+                        http_route = root_span.get_tag("http.route") or ""
+                        
+                        # Keep traces for /recommend, drop everything else
+                        if "/recommend" in http_url or "/recommend" in http_route:
+                            return trace
+                    
+                    # Drop this trace (not /recommend)
+                    return None
+            
+            tracer_config["FILTERS"] = [RecommendOnlyFilter()]
+            
+            tracer.configure(settings=tracer_config)
+            print("[Datadog] Trace filtering enabled (only /recommend endpoint)")
+        except Exception as e:
+            print(f"[Datadog] Failed to configure tracer: {e}")
+            return
+
+        # Enable LLM Observability if API key is provided
         if settings.dd_api_key:
             try:
                 LLMObs.enable(
@@ -121,6 +174,10 @@ class DatadogObservability:
             if not settings.dd_trace_enabled or not DDTRACE_AVAILABLE:
                 return await func(*args, **kwargs)
 
+            # Extract query and candidates for metadata
+            query = args[0] if args else kwargs.get("query", "")
+            candidates = args[1] if len(args) > 1 else kwargs.get("candidates", [])
+
             with tracer.trace(
                 "llm.rerank",
                 service=settings.dd_service,
@@ -129,10 +186,6 @@ class DatadogObservability:
                 span.set_tag("llm.provider", "anthropic")
                 span.set_tag("llm.model", "claude-haiku-4-5")
                 span.set_tag("llm.operation", "rerank")
-                
-                # Extract query and candidates for metadata
-                query = args[0] if args else kwargs.get("query", "")
-                candidates = args[1] if len(args) > 1 else kwargs.get("candidates", [])
                 
                 if isinstance(query, str):
                     span.set_tag("llm.query_length", len(query))
@@ -148,45 +201,83 @@ class DatadogObservability:
         return wrapper
 
     @staticmethod
-    def annotate_llm_call(
+    def wrap_llm_call(
         model: str,
-        input_messages: list[dict[str, str]],
-        output_data: dict[str, Any],
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
+        model_provider: str,
+        operation_name: str = "llm",
+    ):
         """
-        Annotate an LLM call with LLM Observability.
+        Context manager to wrap an LLM call with LLM Observability.
         
-        This captures token usage, cost estimates, and other LLM-specific metrics
-        that are tracked in Datadog's LLM Observability dashboard.
+        Usage:
+            with DatadogObservability.wrap_llm_call("claude-haiku-4-5", "anthropic") as obs:
+                response = await client.messages.create(...)
+                obs.annotate(
+                    input_messages=[...],
+                    output_messages=[...],
+                    metadata={"input_tokens": ..., "output_tokens": ...}
+                )
         """
-        if not settings.dd_trace_enabled or not DatadogObservability._initialized:
-            return
-
-        try:
-            # Extract token usage from response
-            usage = output_data.get("usage", {})
-            input_tokens = usage.get("input_tokens", 0)
-            output_tokens = usage.get("output_tokens", 0)
-
-            # Build metadata
-            llm_metadata = {
-                "model": model,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-                **(metadata or {}),
-            }
-
-            # Log the LLM observation
-            LLMObs.annotate(
-                input_data=input_messages,
-                output_data=output_data.get("content", []),
-                metadata=llm_metadata,
-                tags={
-                    "ml_app": settings.dd_service,
-                    "env": settings.dd_env,
-                },
-            )
-        except Exception as e:
-            print(f"[Datadog] Failed to annotate LLM call: {e}")
+        class LLMObsContext:
+            def __init__(self, enabled: bool):
+                self.enabled = enabled
+                self.llm_obs_span = None
+            
+            def __enter__(self):
+                if not self.enabled or not DDTRACE_AVAILABLE or not DatadogObservability._initialized:
+                    return self
+                
+                try:
+                    # Create LLMObs span context
+                    self.llm_obs_span = LLMObs.llm(
+                        model_name=model,
+                        model_provider=model_provider,
+                        name=operation_name,
+                        ml_app=settings.dd_service,
+                    )
+                    self.llm_obs_span.__enter__()
+                except Exception as e:
+                    print(f"[Datadog] Failed to create LLMObs span: {e}")
+                    self.llm_obs_span = None
+                
+                return self
+            
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                if self.llm_obs_span is not None:
+                    try:
+                        self.llm_obs_span.__exit__(exc_type, exc_val, exc_tb)
+                    except Exception as e:
+                        print(f"[Datadog] Failed to close LLMObs span: {e}")
+                return False
+            
+            def annotate(
+                self,
+                input_messages: list[dict[str, str]] | None = None,
+                output_messages: list[dict[str, str]] | None = None,
+                metadata: dict[str, Any] | None = None,
+            ) -> None:
+                """Annotate the current LLM span with input/output/metadata."""
+                if not self.enabled or self.llm_obs_span is None:
+                    return
+                
+                try:
+                    if input_messages:
+                        LLMObs.annotate(
+                            input_data=input_messages,
+                            span=self.llm_obs_span,
+                        )
+                    if output_messages:
+                        LLMObs.annotate(
+                            output_data=output_messages,
+                            span=self.llm_obs_span,
+                        )
+                    if metadata:
+                        LLMObs.annotate(
+                            metadata=metadata,
+                            span=self.llm_obs_span,
+                        )
+                except Exception as e:
+                    print(f"[Datadog] Failed to annotate LLMObs span: {e}")
+        
+        enabled = settings.dd_trace_enabled and DatadogObservability._initialized and DDTRACE_AVAILABLE
+        return LLMObsContext(enabled)

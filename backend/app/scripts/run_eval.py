@@ -77,7 +77,9 @@ async def main() -> None:
                     print(f"Query: \"{result['query']}\"")
                     print(f"  Results: {result['results_count']} movies")
                     print(f"  Genres: {', '.join(result['genres_found'])} ({result['unique_genres_count']} unique)")
+                    print(f"  Expected genres matched: {result['expected_genres_matched']}")
                     print(f"  Avg rating: {result['avg_vote_average']}/10")
+                    print(f"  Avg reason length: {result['avg_reason_length']} chars")
                     
                     if not result["passed"]:
                         print(f"  Notes: {result['notes']}")

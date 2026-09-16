@@ -50,31 +50,32 @@ async def rerank(query: str, candidates: list[dict]) -> list[dict]:
         return []
 
     prompt = _build_prompt(query, candidates)
-    message = await client.messages.create(
+    
+    # Wrap LLM call with LLM Observability context
+    with DatadogObservability.wrap_llm_call(
         model=RERANK_MODEL,
-        max_tokens=1024,
-        tools=[RERANK_TOOL],
-        tool_choice={"type": "tool", "name": "return_recommendations"},
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    # Annotate LLM call for Datadog LLM Observability
-    DatadogObservability.annotate_llm_call(
-        model=RERANK_MODEL,
-        input_messages=[{"role": "user", "content": prompt}],
-        output_data={
-            "content": message.content,
-            "usage": {
+        model_provider="anthropic",
+        operation_name="rerank",
+    ) as obs:
+        message = await client.messages.create(
+            model=RERANK_MODEL,
+            max_tokens=1024,
+            tools=[RERANK_TOOL],
+            tool_choice={"type": "tool", "name": "return_recommendations"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+        
+        # Annotate with token usage and metadata
+        obs.annotate(
+            input_messages=[{"role": "user", "content": prompt}],
+            output_messages=[{"role": "assistant", "content": str(message.content)}],
+            metadata={
                 "input_tokens": message.usage.input_tokens,
                 "output_tokens": message.usage.output_tokens,
+                "total_tokens": message.usage.input_tokens + message.usage.output_tokens,
+                "candidate_count": len(candidates),
             },
-        },
-        metadata={
-            "query": query,
-            "candidate_count": len(candidates),
-            "model": RERANK_MODEL,
-        },
-    )
+        )
 
     tool_use = next(block for block in message.content if block.type == "tool_use")
     picks = tool_use.input.get("results", [])
