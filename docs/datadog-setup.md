@@ -22,19 +22,21 @@ This document describes the Datadog observability instrumentation and evaluation
 4. Implement appropriate PII scrubbing if needed
 5. Consider disabling LLM Observability (`DD_API_KEY` unset) if data transmission is a concern
 
-**To disable LLM Observability while keeping APM tracing:**
-- Omit `DD_API_KEY` from environment variables
-- APM tracing will still work via `ddtrace-run` (no LLM data sent)
+**To disable data transmission entirely:**
+- Omit `DD_API_KEY` or set `DD_TRACE_ENABLED=false`
+- Application runs normally without any Datadog integration
 
 ---
 
 ## Overview
 
 The implementation follows the observability plan outlined in `architecture.md`:
-- **APM tracing** via `ddtrace-run` wraps the FastAPI application
-- **Custom spans** instrument embedding, vector search, and LLM reranking operations
-- **LLM Observability** tracks token counts, costs, and latency for Claude Haiku calls
+- **LLM Observability** (agentless) tracks token counts, costs, and latency for Claude Haiku calls
+- **Custom spans** instrument embedding, vector search, and LLM reranking operations  
+- **Trace filtering** limits observability to `/recommend` endpoint only
 - **Evaluation harness** provides systematic quality testing of recommendations
+
+**Note**: When using agentless LLM Observability mode (recommended for production), traditional APM tracing is disabled. LLM Observability provides comprehensive request-level visibility without requiring a Datadog agent.
 
 ## Architecture
 
@@ -79,11 +81,12 @@ SUPABASE_DB_URL=postgresql://...
 ANTHROPIC_API_KEY=sk-ant-...
 
 # Datadog configuration (new)
-DD_API_KEY=your_datadog_api_key_here  # Optional, but required for LLM Observability
-DD_SERVICE=movie-rec-backend           # Service name in Datadog
-DD_ENV=dev                             # Environment (dev, staging, production)
+DD_TRACE_ENABLED=false                 # Enable observability (default: false - opt-in required)
+DD_API_KEY=your_datadog_api_key_here   # Required when DD_TRACE_ENABLED=true for LLM Observability
+DD_SERVICE=movie-rec-backend           # Service name in Datadog (default shown)
+DD_ENV=dev                             # Environment: dev, staging, production (default: dev)
 DD_VERSION=1.0.0                       # Optional: version tag for this deployment
-DD_TRACE_ENABLED=true                  # Enable/disable tracing (default: true)
+DD_TRACE_AGENT_URL=                    # Optional: custom agent URL (advanced use only)
 ```
 
 ### Obtaining a Datadog API Key
@@ -93,20 +96,37 @@ DD_TRACE_ENABLED=true                  # Enable/disable tracing (default: true)
 3. Create a new API key or copy an existing one
 4. Add it to your `.env` file as `DD_API_KEY`
 
-**Note**: The application will run without `DD_API_KEY`, but LLM Observability features will be disabled. APM tracing via `ddtrace-run` will still work for basic request/response tracing.
+**Important**: The application runs normally without Datadog. Observability is **opt-in** (set `DD_TRACE_ENABLED=true` and provide `DD_API_KEY`).
 
-## Running with Datadog APM
+## Running with Datadog Observability
 
-### Local Development
+### Observability Modes
 
-Start the FastAPI server with Datadog APM instrumentation:
+**Agentless LLM Observability (Recommended for Production)**:
+- Set `DD_TRACE_ENABLED=true` and provide `DD_API_KEY`
+- Uses agentless mode (data sent directly to Datadog, no local agent required)
+- Captures LLM calls, token usage, costs, and latency
+- Traditional APM tracing is **disabled** in this mode (only LLM Observability is active)
+- TraceFilter is not used (no agent to filter)
+
+**Agent-based APM (Advanced/Local Development Only)**:
+- Requires local Datadog agent running on port 8126
+- Set `DD_TRACE_ENABLED=true` and `DD_TRACE_AGENT_URL=http://localhost:8126`
+- Omit `DD_API_KEY` to use agent-only mode
+- Not recommended for production (use agentless mode instead)
+
+### Local Development with LLM Observability
+
+Start the FastAPI server with Datadog observability enabled:
 
 ```bash
 cd backend
-ddtrace-run uvicorn app.main:app --reload
+export DD_TRACE_ENABLED=true
+export DD_API_KEY=your_key_here
+uvicorn app.main:app --reload
 ```
 
-The `ddtrace-run` command automatically instruments FastAPI, asyncpg, and HTTP clients.
+**Note**: The Procfile automatically wraps the server with `ddtrace-run` when deployed with `DD_TRACE_ENABLED=true` AND `DD_API_KEY` set. For local development, `ddtrace-run` is optional (the instrumentation initializes at startup either way).
 
 ### Custom Spans
 
@@ -127,7 +147,9 @@ Three custom spans are automatically added to the `/recommend` endpoint:
 
 ### Trace Filtering
 
-Per the architecture plan, tracing is scoped to **`/recommend` requests only**. Health checks (`/health`) and static assets do not generate traces, keeping signal-to-noise high and staying within Datadog's free tier limits.
+Per the architecture plan, observability is scoped to **`/recommend` requests only**. Health checks (`/health`) and static assets do not generate observability data.
+
+**Important**: The `TraceFilter` that filters by endpoint is only active in **agent-based APM mode** (advanced/local development). In the recommended **agentless LLM Observability mode** (production), the tracer is disabled (`enabled=False`), so the TraceFilter is not used. Instead, LLM Observability naturally captures only `/recommend` because that's the only endpoint that calls `wrap_llm_call()`.
 
 ## Running the Evaluation Harness
 
@@ -182,12 +204,23 @@ python -m app.scripts.run_eval --json
 
 ## Evaluation Metrics
 
-Each test query is evaluated on:
+Each test query is evaluated on five criteria (all must pass):
 
-1. **Result count**: Must return at least `min_results` (typically 3-5)
-2. **Genre diversity**: Number of unique genres in results
-3. **Average rating**: Mean `vote_average` across results (must be ≥6.0)
-4. **Reason quality**: Each result must include a query-specific reason
+1. **Result count**: Must return at least `min_results` (default: 3)
+2. **Genre diversity**: Number of unique genres in results (must be > 0)
+3. **Expected genre matching**: At least 1 genre from `expected_genres` must appear in results
+4. **Average rating**: Mean `vote_average` across results (must be ≥ 6.0)
+5. **Reason quality**: Average reason length must be ≥ `min_reason_length` (default: 20 characters)
+
+**Example**:
+```python
+EvalQuery(
+    query="a lighthearted comedy for Friday night",
+    expected_genres=["Comedy"],  # At least one must match
+    min_results=3,
+    min_reason_length=20,
+)
+```
 
 ### Test Query Coverage
 
@@ -197,6 +230,8 @@ The 8 test queries cover:
 - Genre + mood combinations ("mind-bending sci-fi")
 - Artistic characteristics ("visually stunning with minimal dialogue")
 - Audience-specific requests ("heartwarming family movie")
+
+Each query defines `expected_genres` that must match at least one result genre, preventing irrelevant recommendations (e.g., Horror results for a Comedy query would fail).
 
 ## Datadog Dashboard Metrics
 
@@ -241,12 +276,28 @@ Add the evaluation harness to your CI pipeline to catch regressions:
 
 For production deployments (e.g., Railway):
 
-1. Add `DD_API_KEY`, `DD_ENV=production`, and `DD_VERSION` as environment variables
-2. Ensure the start command uses `ddtrace-run`:
+1. Set environment variables:
+   ```bash
+   DD_TRACE_ENABLED=true
+   DD_API_KEY=your_production_key
+   DD_ENV=production
+   DD_VERSION=1.0.0
+   DD_SERVICE=movie-rec-backend
    ```
-   ddtrace-run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
+2. The Procfile automatically uses `ddtrace-run` when **both** `DD_TRACE_ENABLED=true` AND `DD_API_KEY` are set:
+   ```bash
+   # From backend/Procfile
+   web: if [ "$DD_TRACE_ENABLED" = "true" ] && [ -n "$DD_API_KEY" ]; then 
+     ddtrace-run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+   else 
+     uvicorn app.main:app --host 0.0.0.0 --port $PORT
+   fi
    ```
-3. Monitor the Datadog dashboard for request volume, latency, and LLM costs
+
+3. Monitor the Datadog LLM Observability dashboard for token usage, costs, and latency
+
+**Note**: Agentless mode is used in production (no Datadog agent required). Traditional APM metrics are not available; use LLM Observability for request-level visibility.
 
 ## Cost Considerations
 
@@ -258,14 +309,19 @@ For production deployments (e.g., Railway):
 
 ### "DD_API_KEY not set" Warning
 
-This is expected if you haven't added a Datadog API key yet. Basic APM tracing via `ddtrace-run` will still work; only LLM Observability features require the API key.
+This is expected if you haven't configured Datadog. The application runs normally without observability.
 
-### No Traces in Datadog
+To enable observability:
+1. Set `DD_TRACE_ENABLED=true` in `.env`
+2. Add `DD_API_KEY=your_key` to `.env`
+3. Restart the application
 
-1. Verify `DD_TRACE_ENABLED=true` in your `.env`
-2. Check that you're starting the app with `ddtrace-run`
-3. Make a request to `/recommend` (not `/health`)
-4. Allow 1-2 minutes for traces to appear in Datadog
+### No Data in Datadog
+
+1. Verify **both** `DD_TRACE_ENABLED=true` and `DD_API_KEY` are set
+2. Make a request to `/recommend` (not `/health`, which is not traced)
+3. Check Datadog **LLM Observability** dashboard (not APM - agentless mode uses LLM Observability only)
+4. Allow 1-2 minutes for data to appear
 
 ### Eval Harness Fails
 

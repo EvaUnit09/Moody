@@ -153,6 +153,48 @@ class TestLLMObsContextManager:
                         with DatadogObservability.wrap_llm_call("test", "test") as obs:
                             obs.annotate(metadata={"test": "data"})
 
+    def test_wrap_llm_call_enabled_success_path(self):
+        """Context manager should successfully annotate when enabled and ddtrace available."""
+        with patch.dict('sys.modules', {'ddtrace': MagicMock(), 'ddtrace.filters': MagicMock(), 'ddtrace.llmobs': MagicMock()}):
+            with patch('app.services.observability.settings') as mock_settings:
+                mock_settings.dd_trace_enabled = True
+                mock_settings.dd_service = "test-service"
+                
+                with patch('app.services.observability.DatadogObservability._initialized', True):
+                    with patch('app.services.observability.DDTRACE_AVAILABLE', True):
+                        with patch('app.services.observability.LLMObs') as mock_llmobs:
+                            # Create a mock span context
+                            mock_span = MagicMock()
+                            mock_span.__enter__ = Mock(return_value=mock_span)
+                            mock_span.__exit__ = Mock(return_value=False)
+                            mock_llmobs.llm.return_value = mock_span
+                            
+                            from app.services.observability import DatadogObservability
+                            
+                            # Test the full enabled path
+                            with DatadogObservability.wrap_llm_call("claude-haiku-4-5", "anthropic", "rerank") as obs:
+                                # Annotate should work
+                                obs.annotate(
+                                    input_messages=[{"role": "user", "content": "test query"}],
+                                    output_messages=[{"role": "assistant", "content": "test response"}],
+                                    metadata={"input_tokens": 10, "output_tokens": 20}
+                                )
+                            
+                            # Verify LLMObs.llm was called with correct params
+                            mock_llmobs.llm.assert_called_once_with(
+                                model_name="claude-haiku-4-5",
+                                model_provider="anthropic",
+                                name="rerank",
+                                ml_app="test-service",
+                            )
+                            
+                            # Verify annotate was called 3 times (once for each type of data)
+                            assert mock_llmobs.annotate.call_count == 3
+                            
+                            # Verify span context was entered and exited
+                            mock_span.__enter__.assert_called_once()
+                            mock_span.__exit__.assert_called_once()
+
 
 class TestInitializationBehavior:
     """Test initialization behavior under different conditions."""
