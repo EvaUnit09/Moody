@@ -7,3 +7,4 @@ pgvector
 pydantic-settings
 python-dotenv
 httpx
+ddtrace>=2.0.0

@@ -11,6 +11,12 @@ class Settings(BaseSettings):
         "http://localhost:5173,http://127.0.0.1:5173,"
         "http://localhost:5174,http://127.0.0.1:5174"
     )
+    
+    dd_api_key: str | None = None
+    dd_service: str = "movie-rec-backend"
+    dd_env: str = "dev"
+    dd_version: str | None = None
+    dd_trace_enabled: bool = True
 
     @property
     def allowed_origins_list(self) -> list[str]:
