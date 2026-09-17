@@ -134,8 +134,8 @@ describe("MovieCard", () => {
     expect(screen.getByText("Fight Club")).toBeInTheDocument();
   });
 
-  test("renders up to 3 providers only", () => {
-    const movieWithManyProviders = {
+  test("renders all providers received from backend (backend enforces max-3)", () => {
+    const movieWithProviders = {
       ...MOCK_MOVIE,
       providers: [
         {
@@ -153,20 +153,15 @@ describe("MovieCard", () => {
           logo_url: "https://image.tmdb.org/t/p/original/hulu.png",
           link: "https://www.themoviedb.org/movie/550/watch",
         },
-        {
-          name: "Disney+",
-          logo_url: "https://image.tmdb.org/t/p/original/disney.png",
-          link: "https://www.themoviedb.org/movie/550/watch",
-        },
       ],
     };
 
-    render(<MovieCard movie={movieWithManyProviders} />);
+    render(<MovieCard movie={movieWithProviders} />);
 
+    // Frontend renders all providers it receives (backend caps at 3)
     expect(screen.getByAltText("Netflix")).toBeInTheDocument();
     expect(screen.getByAltText("Prime Video")).toBeInTheDocument();
     expect(screen.getByAltText("Hulu")).toBeInTheDocument();
-    expect(screen.queryByAltText("Disney+")).toBeInTheDocument();
   });
 
   test("does not render reason when not provided", () => {

@@ -53,6 +53,9 @@ class WatchProviderService:
     MAX_PROVIDERS = 3
     MAX_CONCURRENT_REQUESTS = 10
     
+    # Class-level cache dict for successful fetches
+    _cache: dict[str, tuple[tuple[tuple[str, Any], ...], ...]] = {}
+    
     # Allowlist for watch provider links (TMDB and JustWatch only)
     ALLOWED_LINK_PATTERN = re.compile(
         r'^https://(www\.)?'
@@ -82,23 +85,23 @@ class WatchProviderService:
         return f"{tmdb_id}|{region}"
     
     @classmethod
-    @lru_cache(maxsize=1024)
-    def _get_cached_providers(cls, cache_key: str) -> tuple[dict[str, Any], ...] | None:
-        """Get cached providers if available. None means not cached (different from empty list)."""
+    def _get_cached_providers(cls, cache_key: str) -> list[dict[str, Any]] | None:
+        """Get cached providers if available. None means not cached."""
+        if cache_key in cls._cache:
+            cached_tuple = cls._cache[cache_key]
+            return [dict(provider) for provider in cached_tuple]
         return None
     
     @classmethod
     def _store_cached_providers(cls, cache_key: str, providers: list[dict[str, Any]]) -> None:
         """Store successful provider fetch in cache. Converts to tuple for hashability."""
-        if providers:
-            tuple_data = tuple(tuple(sorted(p.items())) for p in providers)
-            cls._get_cached_providers.cache_clear()
-            cls._get_cached_providers.__wrapped__(cache_key)
-            cls._get_cached_providers.cache_info()
-            # Store in manual cache dict instead
-            if not hasattr(cls, '_cache'):
-                cls._cache: dict[str, tuple[dict[str, Any], ...]] = {}
-            cls._cache[cache_key] = tuple_data
+        try:
+            if providers:
+                tuple_data = tuple(tuple(sorted(p.items())) for p in providers)
+                cls._cache[cache_key] = tuple_data
+        except Exception as e:
+            # Cache write failure should not affect the result returned to caller
+            print(f"[watch_providers] Cache write failed for {cache_key}: {e}")
     
     @classmethod
     async def fetch_providers(cls, tmdb_id: int, region: str | None = None) -> list[dict[str, Any]]:
@@ -106,15 +109,15 @@ class WatchProviderService:
         Async fetch watch providers for a movie.
         Returns list of {name, logo_url, link}. Empty list on failure (not cached).
         """
+        normalized_region = cls._validate_region(region)
+        cache_key = cls._build_cache_key(tmdb_id, normalized_region)
+        
+        # Check cache
+        cached = cls._get_cached_providers(cache_key)
+        if cached is not None:
+            return cached
+        
         try:
-            normalized_region = cls._validate_region(region)
-            cache_key = cls._build_cache_key(tmdb_id, normalized_region)
-            
-            # Check cache
-            if hasattr(cls, '_cache') and cache_key in cls._cache:
-                cached_tuple = cls._cache[cache_key]
-                return [dict(provider) for provider in cached_tuple]
-            
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(
                     f"{BASE_URL}/movie/{tmdb_id}/watch/providers",
@@ -151,15 +154,13 @@ class WatchProviderService:
                     result.append(provider_data)
                 
                 # Cache successful result (but not failures)
+                # Cache write failure must not affect the result returned to caller
                 if result:
                     cls._store_cached_providers(cache_key, result)
                 
                 return result
                 
-        except ValueError as e:
-            # Region validation error - re-raise
-            raise
         except Exception as e:
             # Network/API errors - return empty list (don't cache failures)
-            print(f"[watch_providers] Failed to fetch for tmdb_id={tmdb_id}, region={region}: {e}")
+            print(f"[watch_providers] Failed to fetch for tmdb_id={tmdb_id}, region={normalized_region}: {e}")
             return []
