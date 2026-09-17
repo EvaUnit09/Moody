@@ -320,20 +320,72 @@ class TestPromptAnnotation:
             rag_context_variables=["context"],
         )
         
-        # Verify prompt has the correct attributes
-        assert prompt.id == "rerank_prompt"
-        assert "{query}" in prompt.template
-        assert "{context}" in prompt.template
-        assert prompt.variables["query"] == query
-        assert prompt.variables["context"] == context
-        assert "query" in prompt.rag_query_variables
-        assert "context" in prompt.rag_context_variables
+        # On ddtrace 4.x, Prompt is a TypedDict/dict - use dict access
+        # Verify prompt has the correct structure
+        assert prompt["id"] == "rerank_prompt"
+        assert "{query}" in prompt["template"]
+        assert "{context}" in prompt["template"]
+        assert prompt["variables"]["query"] == query
+        assert prompt["variables"]["context"] == context
+        assert "query" in prompt["rag_query_variables"]
+        assert "context" in prompt["rag_context_variables"]
         
         # Verify context contains the candidate data
         assert "tmdb_id: 1" in context
         assert "The Matrix" in context
         assert "tmdb_id: 2" in context
         assert "Blade Runner" in context
+
+    def test_annotate_receives_prompt_with_id_and_variables(self):
+        """Stronger test: verify annotate() actually receives prompt with id/query/context."""
+        with patch.dict('sys.modules', {'ddtrace': MagicMock(), 'ddtrace.filters': MagicMock(), 'ddtrace.llmobs': MagicMock()}):
+            with patch('app.services.observability.settings') as mock_settings:
+                mock_settings.dd_trace_enabled = True
+                mock_settings.dd_service = "test-service"
+                
+                with patch('app.services.observability.DatadogObservability._initialized', True):
+                    with patch('app.services.observability.DDTRACE_AVAILABLE', True):
+                        with patch('app.services.observability.LLMObs') as mock_llmobs:
+                            mock_span = MagicMock()
+                            mock_span.__enter__ = Mock(return_value=mock_span)
+                            mock_span.__exit__ = Mock(return_value=False)
+                            mock_llmobs.llm.return_value = mock_span
+                            
+                            from app.services.observability import DatadogObservability
+                            
+                            # Create a real-ish prompt dict (as ddtrace 4.x returns)
+                            test_prompt = {
+                                "id": "rerank_prompt",
+                                "template": "User request: {query}\n\nContext: {context}",
+                                "variables": {
+                                    "query": "test query",
+                                    "context": "test context data"
+                                },
+                                "rag_query_variables": ["query"],
+                                "rag_context_variables": ["context"]
+                            }
+                            
+                            with DatadogObservability.wrap_llm_call("claude-haiku-4-5", "anthropic", "rerank") as obs:
+                                obs.annotate(
+                                    input_messages=[{"role": "user", "content": "test"}],
+                                    output_messages=[{"role": "assistant", "content": "response"}],
+                                    metadata={"input_tokens": 10},
+                                    prompt=test_prompt
+                                )
+                            
+                            # Find the annotate call with prompt
+                            prompt_calls = [call for call in mock_llmobs.annotate.call_args_list 
+                                           if call.kwargs.get('prompt') is not None]
+                            
+                            assert len(prompt_calls) == 1
+                            captured_prompt = prompt_calls[0].kwargs['prompt']
+                            
+                            # Verify the captured prompt has id and correct variables
+                            assert captured_prompt["id"] == "rerank_prompt"
+                            assert captured_prompt["variables"]["query"] == "test query"
+                            assert captured_prompt["variables"]["context"] == "test context data"
+                            assert "query" in captured_prompt["rag_query_variables"]
+                            assert "context" in captured_prompt["rag_context_variables"]
 
 
 class TestInitializationBehavior:
