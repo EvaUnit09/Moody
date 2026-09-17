@@ -256,8 +256,9 @@ class DatadogObservability:
                 input_messages: list[dict[str, str]] | None = None,
                 output_messages: list[dict[str, str]] | None = None,
                 metadata: dict[str, Any] | None = None,
+                prompt: Any | None = None,
             ) -> None:
-                """Annotate the current LLM span with input/output/metadata."""
+                """Annotate the current LLM span with input/output/metadata/prompt."""
                 if not self.enabled or self.llm_obs_span is None:
                     return
                 
@@ -275,6 +276,11 @@ class DatadogObservability:
                     if metadata:
                         LLMObs.annotate(
                             metadata=metadata,
+                            span=self.llm_obs_span,
+                        )
+                    if prompt:
+                        LLMObs.annotate(
+                            prompt=prompt,
                             span=self.llm_obs_span,
                         )
                 except Exception as e:
