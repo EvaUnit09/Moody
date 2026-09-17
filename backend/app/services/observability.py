@@ -44,47 +44,47 @@ class DatadogObservability:
 
         # Configure tracer to use agentless mode or custom agent URL
         try:
-            tracer_config = {}
-            
-            # If using agentless mode (DD_API_KEY set), disable agent
-            if settings.dd_api_key:
-                tracer_config["enabled"] = False  # Disable agent-based tracing, use LLMObs only
-                print("[Datadog] Using agentless mode (LLM Observability only)")
-            elif settings.dd_trace_agent_url:
-                # Custom agent URL for local development
-                tracer_config["agent_url"] = settings.dd_trace_agent_url
-                print(f"[Datadog] Using custom agent URL: {settings.dd_trace_agent_url}")
-            else:
-                # No API key and no agent URL = disable to prevent connection attempts
-                print("[Datadog] No DD_API_KEY or DD_TRACE_AGENT_URL, disabling to prevent agent connection")
-                return
-            
             # Configure trace filtering to only trace /recommend endpoint
-            from ddtrace.filters import TraceFilter
-            
+            from ddtrace.trace import TraceFilter
+
             class RecommendOnlyFilter(TraceFilter):
                 """Filter to only keep traces for /recommend endpoint."""
-                
+
                 def process_trace(self, trace):
                     if not trace:
                         return trace
-                    
+
                     # Check the root span for the HTTP path
                     root_span = trace[0] if trace else None
                     if root_span:
                         http_url = root_span.get_tag("http.url") or ""
                         http_route = root_span.get_tag("http.route") or ""
-                        
+
                         # Keep traces for /recommend, drop everything else
                         if "/recommend" in http_url or "/recommend" in http_route:
                             return trace
-                    
+
                     # Drop this trace (not /recommend)
                     return None
-            
-            tracer_config["FILTERS"] = [RecommendOnlyFilter()]
-            
-            tracer.configure(settings=tracer_config)
+
+            trace_processors = [RecommendOnlyFilter()]
+
+            # If using agentless mode (DD_API_KEY set), disable APM tracing
+            # entirely so ddtrace never tries to flush spans to a local agent.
+            # LLM Observability is reported separately via LLMObs.enable() below.
+            if settings.dd_api_key:
+                tracer.configure(apm_tracing_disabled=True, trace_processors=trace_processors)
+                print("[Datadog] Using agentless mode (LLM Observability only)")
+            elif settings.dd_trace_agent_url:
+                # ddtrace reads the agent URL from the DD_TRACE_AGENT_URL env var
+                # at tracer init time; configure() no longer accepts an agent_url kwarg.
+                tracer.configure(trace_processors=trace_processors)
+                print(f"[Datadog] Using custom agent URL: {settings.dd_trace_agent_url}")
+            else:
+                # No API key and no agent URL = disable to prevent connection attempts
+                print("[Datadog] No DD_API_KEY or DD_TRACE_AGENT_URL, disabling to prevent agent connection")
+                return
+
             print("[Datadog] Trace filtering enabled (only /recommend endpoint)")
         except Exception as e:
             print(f"[Datadog] Failed to configure tracer: {e}")
@@ -93,15 +93,16 @@ class DatadogObservability:
         # Enable LLM Observability if API key is provided
         if settings.dd_api_key:
             try:
+                ml_app = settings.dd_llmobs_ml_app or settings.dd_service
                 LLMObs.enable(
-                    ml_app=settings.dd_service,
+                    ml_app=ml_app,
                     integrations_enabled=True,
                     agentless_enabled=True,
                     api_key=settings.dd_api_key,
-                    site="datadoghq.com",
+                    site=settings.dd_site,
                 )
                 DatadogObservability._initialized = True
-                print(f"[Datadog] LLM Observability enabled for {settings.dd_service}")
+                print(f"[Datadog] LLM Observability enabled for {ml_app}")
             except Exception as e:
                 print(f"[Datadog] Failed to enable LLM Observability: {e}")
         else:
