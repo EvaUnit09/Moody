@@ -52,6 +52,35 @@
   padding: 64px var(--space-8) 48px;
 }
 
+.mood-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+  justify-content: center;
+}
+
+.mood-chip {
+  cursor: pointer;
+  background: transparent;
+  font: inherit;
+  transition: all 0.2s ease;
+}
+
+.mood-chip:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  transform: translateY(-1px);
+}
+
+.mood-chip:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.mood-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .search-box-tag {
   margin-bottom: var(--space-6);
   width: fit-content;
@@ -113,6 +142,45 @@
 .status {
   color: var(--color-neutral-300);
   font-size: 13px;
+}
+
+.recovery-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-8) 0;
+  animation: fadeUp 0.4s ease both;
+}
+
+.recovery-message {
+  color: var(--color-neutral-300);
+  font-size: 14px;
+  margin: 0;
+}
+
+.recovery-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+  max-width: 600px;
+}
+
+.recovery-chip {
+  cursor: pointer;
+  background: transparent;
+  font: inherit;
+  transition: all 0.2s ease;
+}
+
+.recovery-chip:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  transform: translateY(-1px);
+}
+
+.recovery-chip:active {
+  transform: translateY(0);
 }
 
 .results-grid {
