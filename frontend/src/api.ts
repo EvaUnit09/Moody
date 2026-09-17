@@ -1,5 +1,11 @@
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+export interface WatchProvider {
+  name: string;
+  logo_url: string | null;
+  link: string;
+}
+
 export interface Movie {
   tmdb_id: number;
   title: string;
@@ -11,6 +17,7 @@ export interface Movie {
 
 export interface MovieRecommendation extends Movie {
   reason: string;
+  providers: WatchProvider[];
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
