@@ -234,7 +234,7 @@ class DatadogObservability:
                         model_name=model,
                         model_provider=model_provider,
                         name=operation_name,
-                        ml_app=settings.dd_service,
+                        ml_app=settings.dd_llmobs_ml_app or settings.dd_service,
                     )
                     self.llm_obs_span.__enter__()
                 except Exception as e:
