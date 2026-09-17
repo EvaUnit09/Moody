@@ -3,6 +3,13 @@ from pydantic import BaseModel
 
 class RecommendRequest(BaseModel):
     query: str
+    region: str | None = None
+
+
+class WatchProvider(BaseModel):
+    name: str
+    logo_url: str | None
+    link: str
 
 
 class MovieBase(BaseModel):
@@ -16,6 +23,7 @@ class MovieBase(BaseModel):
 
 class MovieRecommendation(MovieBase):
     reason: str
+    providers: list[WatchProvider] = []
 
 
 class RecommendResponse(BaseModel):

@@ -12,6 +12,7 @@ def setup_test_env():
     os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
     os.environ.setdefault("SUPABASE_DB_URL", "postgresql://test:test@localhost:5432/test")
     os.environ.setdefault("ANTHROPIC_API_KEY", "test-anthropic-key")
+    os.environ.setdefault("API_READ_ACCESS_TOKEN", "test-tmdb-token")
     os.environ.setdefault("DD_TRACE_ENABLED", "false")
     os.environ.setdefault("DD_API_KEY", "")
     yield

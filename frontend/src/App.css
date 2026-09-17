@@ -244,6 +244,43 @@ img.movie-card-poster:not(.movie-card-poster-loaded) {
   margin: 6px 0;
 }
 
+.movie-card-providers {
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  align-items: center;
+}
+
+.provider-logo-link {
+  display: block;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  text-decoration: none;
+}
+
+.provider-logo-link:hover {
+  transform: scale(1.08);
+  opacity: 0.9;
+}
+
+.provider-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  display: block;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.provider-name {
+  font-size: 11px;
+  color: var(--color-accent);
+  text-decoration: none;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  border-radius: var(--radius-sm);
+  display: block;
+}
+
 .movie-card-meta {
   gap: var(--space-3);
   padding-top: var(--space-2);
