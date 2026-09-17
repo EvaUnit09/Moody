@@ -1,14 +1,17 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.db import close_pool, get_pool
 from app.routers.popular import router as popular_router
 from app.routers.popular import warm_popular_cache
-from app.routers.recommend import router as recommend_router
+from app.routers.recommend import router as recommend_router, limiter
 from app.services.observability import DatadogObservability
 
 POPULAR_CACHE_REFRESH_SECONDS = 3300  # keep the cache warm ahead of its 3600s TTL
@@ -34,6 +37,22 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+# Add rate limiter state to app
+app.state.limiter = limiter
+
+# Custom rate limit exceeded handler with friendly message
+@app.exception_handler(RateLimitExceeded)
+async def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": "Rate limit exceeded",
+            "message": "You've made too many requests. Please try again in a minute.",
+        },
+        headers={"Retry-After": "60"},
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
