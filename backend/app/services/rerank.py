@@ -4,11 +4,17 @@ from app.config import settings
 from app.services.observability import DatadogObservability
 
 try:
-    from ddtrace.llmobs.utils import Prompt
+    # Try importing from ddtrace.llmobs.types first (ddtrace 4.x+)
+    from ddtrace.llmobs.types import Prompt
     PROMPT_AVAILABLE = True
 except ImportError:
-    Prompt = None
-    PROMPT_AVAILABLE = False
+    try:
+        # Fallback to ddtrace.llmobs for older versions
+        from ddtrace.llmobs import Prompt
+        PROMPT_AVAILABLE = True
+    except ImportError:
+        Prompt = None
+        PROMPT_AVAILABLE = False
 
 RERANK_MODEL = "claude-haiku-4-5"
 TOP_N = 6
@@ -84,7 +90,8 @@ async def rerank(query: str, candidates: list[dict]) -> list[dict]:
         prompt_annotation = None
         if PROMPT_AVAILABLE and Prompt is not None:
             prompt_annotation = Prompt(
-                template='User request: "{query}"\n\nCandidate movies (from vector search):\n{context}\n\nPick the best 6 matches for the user\'s request and give a one-line reason for each, grounded in the movie\'s overview.',
+                id="rerank_prompt",
+                template=f'User request: "{{query}}"\n\nCandidate movies (from vector search):\n{{context}}\n\nPick the best {TOP_N} matches for the user\'s request and give a one-line reason for each, grounded in the movie\'s overview.',
                 variables={"query": query, "context": context},
                 rag_query_variables=["query"],
                 rag_context_variables=["context"],

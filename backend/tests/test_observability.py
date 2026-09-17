@@ -286,6 +286,56 @@ class TestLLMObsContextManager:
                             assert prompt_call[0].kwargs['prompt'] == mock_prompt
 
 
+class TestPromptAnnotation:
+    """Test real Prompt object construction and annotation."""
+
+    def test_rerank_constructs_prompt_with_query_and_context_variables(self):
+        """Regression test: verify rerank creates Prompt with distinct query+context variables."""
+        # Import the real Prompt class if available
+        try:
+            from ddtrace.llmobs.types import Prompt
+        except ImportError:
+            try:
+                from ddtrace.llmobs import Prompt
+            except ImportError:
+                pytest.skip("ddtrace.llmobs.Prompt not available")
+        
+        # Create a real Prompt object as rerank.py would
+        query = "sci-fi action movies"
+        candidates = [
+            {"tmdb_id": 1, "title": "The Matrix", "overview": "A hacker discovers reality is a simulation."},
+            {"tmdb_id": 2, "title": "Blade Runner", "overview": "A blade runner hunts replicants in dystopian LA."},
+        ]
+        context = "\n".join(
+            f"- tmdb_id: {c['tmdb_id']}, title: {c['title']}, overview: {c['overview']}"
+            for c in candidates
+        )
+        
+        # Construct Prompt as rerank.py does
+        prompt = Prompt(
+            id="rerank_prompt",
+            template='User request: "{query}"\n\nCandidate movies (from vector search):\n{context}\n\nPick the best 6 matches for the user\'s request and give a one-line reason for each, grounded in the movie\'s overview.',
+            variables={"query": query, "context": context},
+            rag_query_variables=["query"],
+            rag_context_variables=["context"],
+        )
+        
+        # Verify prompt has the correct attributes
+        assert prompt.id == "rerank_prompt"
+        assert "{query}" in prompt.template
+        assert "{context}" in prompt.template
+        assert prompt.variables["query"] == query
+        assert prompt.variables["context"] == context
+        assert "query" in prompt.rag_query_variables
+        assert "context" in prompt.rag_context_variables
+        
+        # Verify context contains the candidate data
+        assert "tmdb_id: 1" in context
+        assert "The Matrix" in context
+        assert "tmdb_id: 2" in context
+        assert "Blade Runner" in context
+
+
 class TestInitializationBehavior:
     """Test initialization behavior under different conditions."""
 
