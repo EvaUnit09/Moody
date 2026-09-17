@@ -8,8 +8,14 @@ Tests cover:
 - Pass/fail criteria
 """
 
+import os
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
+
+# Set dummy env vars before importing app
+os.environ.setdefault("OPENAI_API_KEY", "test-key")
+os.environ.setdefault("SUPABASE_DB_URL", "postgresql://test:test@localhost/test")
+os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 
 from app.services.eval import EvalQuery, EvalResult, EvaluationHarness
 
