@@ -6,6 +6,8 @@ import { ResultsGrid } from "./components/ResultsGrid";
 import { SkeletonGrid } from "./components/SkeletonGrid";
 import { PosterCarousel } from "./components/PosterCarousel";
 import { CarouselSkeleton } from "./components/CarouselSkeleton";
+import { MoodChips } from "./components/MoodChips";
+import { RecoveryPrompt } from "./components/RecoveryPrompt";
 import "./App.css";
 
 function getErrorMessage(error: unknown): string {
@@ -98,6 +100,9 @@ function App() {
       </header>
 
       <section className="hero">
+        {!hasSearched && (
+          <MoodChips onMoodSelect={handleSearch} disabled={isLoading} />
+        )}
         <SearchBox onSearch={handleSearch} isLoading={isLoading} />
       </section>
 
@@ -119,9 +124,7 @@ function App() {
           {isLoading && <SkeletonGrid />}
 
           {!isLoading && !error && results.length === 0 && (
-            <p className="status">
-              No matches found. Try describing it differently.
-            </p>
+            <RecoveryPrompt onMoodSelect={handleSearch} />
           )}
 
           {!isLoading && !error && <ResultsGrid results={results} />}
