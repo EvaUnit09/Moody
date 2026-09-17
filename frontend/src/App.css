@@ -287,6 +287,32 @@ img.movie-card-poster:not(.movie-card-poster-loaded) {
   border-top: 1px solid var(--color-divider);
 }
 
+.movie-card-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+
+.movie-card-actions .btn-icon {
+  padding: var(--space-2);
+  color: var(--color-neutral-400);
+  transition: color 0.2s ease;
+}
+
+.movie-card-actions .btn-icon:hover {
+  color: var(--color-accent);
+}
+
+.movie-card-actions .btn-icon[aria-label*="Remove"] {
+  color: var(--color-accent);
+}
+
+.movie-card-actions .btn-icon svg {
+  display: block;
+}
+
 .skeleton-block {
   background: var(--color-neutral-800);
   animation: pulse 1.4s ease-in-out infinite;
@@ -394,5 +420,115 @@ img.movie-card-poster:not(.movie-card-poster-loaded) {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 90%;
+  max-width: 520px;
+  background: var(--color-bg);
+  border-left: 1px solid var(--color-divider);
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  animation: slideIn 0.3s ease;
+  overflow-y: auto;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-6) var(--space-8);
+  border-bottom: 1px solid var(--color-divider);
+  position: sticky;
+  top: 0;
+  background: var(--color-bg);
+  z-index: 1;
+}
+
+.drawer-title {
+  margin: 0;
+  font-size: 20px;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+}
+
+.drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-8) var(--space-4);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.drawer-count {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--color-neutral-400);
+}
+
+.drawer-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-8);
+}
+
+.drawer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 96px var(--space-8);
+  text-align: center;
+  gap: var(--space-3);
+}
+
+.btn-sm {
+  font-size: 13px;
+  padding: var(--space-2) var(--space-4);
+}
+
+.watchlist-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+@media (max-width: 720px) {
+  .drawer {
+    width: 100%;
+    max-width: none;
   }
 }
