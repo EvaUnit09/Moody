@@ -89,4 +89,12 @@ describe("SearchBox", () => {
     await user.click(screen.getByRole("button", { name: "Search" }));
     expect(onSearch).toHaveBeenCalledWith("test query");
   });
+
+  test("accepts external value prop to control the input", () => {
+    const { rerender } = render(<SearchBox onSearch={() => {}} isLoading={false} value="" />);
+    expect(screen.getByRole("textbox")).toHaveValue("");
+
+    rerender(<SearchBox onSearch={() => {}} isLoading={false} value="external value" />);
+    expect(screen.getByRole("textbox")).toHaveValue("external value");
+  });
 });

@@ -135,6 +135,19 @@
   margin: 0;
 }
 
+.share-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.share-btn svg {
+  flex-shrink: 0;
+}
+
 .error {
   color: #e5484d;
 }
