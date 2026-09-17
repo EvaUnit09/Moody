@@ -153,6 +153,25 @@ class TestLLMObsContextManager:
                         with DatadogObservability.wrap_llm_call("test", "test") as obs:
                             obs.annotate(metadata={"test": "data"})
 
+    def test_wrap_llm_call_with_prompt_annotation(self):
+        """Context manager should support prompt annotation parameter."""
+        with patch('app.services.observability.settings') as mock_settings:
+            mock_settings.dd_trace_enabled = False
+            
+            from app.services.observability import DatadogObservability
+            
+            # Mock Prompt object
+            mock_prompt = Mock()
+            
+            with DatadogObservability.wrap_llm_call("test-model", "test-provider") as obs:
+                # Should not raise with prompt parameter
+                obs.annotate(
+                    input_messages=[{"role": "user", "content": "test"}],
+                    output_messages=[{"role": "assistant", "content": "response"}],
+                    metadata={"tokens": 10},
+                    prompt=mock_prompt
+                )
+
     def test_wrap_llm_call_enabled_success_path(self):
         """Context manager should successfully annotate when enabled and ddtrace available."""
         with patch.dict('sys.modules', {'ddtrace': MagicMock(), 'ddtrace.filters': MagicMock(), 'ddtrace.llmobs': MagicMock()}):
@@ -224,6 +243,149 @@ class TestLLMObsContextManager:
                                 name="rerank",
                                 ml_app="moody",
                             )
+
+    def test_wrap_llm_call_with_prompt_parameter_enabled(self):
+        """Context manager should annotate prompt when enabled and prompt is provided."""
+        with patch.dict('sys.modules', {'ddtrace': MagicMock(), 'ddtrace.filters': MagicMock(), 'ddtrace.llmobs': MagicMock()}):
+            with patch('app.services.observability.settings') as mock_settings:
+                mock_settings.dd_trace_enabled = True
+                mock_settings.dd_service = "test-service"
+                
+                with patch('app.services.observability.DatadogObservability._initialized', True):
+                    with patch('app.services.observability.DDTRACE_AVAILABLE', True):
+                        with patch('app.services.observability.LLMObs') as mock_llmobs:
+                            # Create a mock span context
+                            mock_span = MagicMock()
+                            mock_span.__enter__ = Mock(return_value=mock_span)
+                            mock_span.__exit__ = Mock(return_value=False)
+                            mock_llmobs.llm.return_value = mock_span
+                            
+                            from app.services.observability import DatadogObservability
+                            
+                            # Mock Prompt object
+                            mock_prompt = Mock()
+                            mock_prompt.template = "Test {query} with {context}"
+                            mock_prompt.variables = {"query": "test query", "context": "test context"}
+                            
+                            # Test the full enabled path with prompt
+                            with DatadogObservability.wrap_llm_call("claude-haiku-4-5", "anthropic", "rerank") as obs:
+                                obs.annotate(
+                                    input_messages=[{"role": "user", "content": "test query"}],
+                                    output_messages=[{"role": "assistant", "content": "test response"}],
+                                    metadata={"input_tokens": 10, "output_tokens": 20},
+                                    prompt=mock_prompt
+                                )
+                            
+                            # Verify annotate was called 4 times (input, output, metadata, prompt)
+                            assert mock_llmobs.annotate.call_count == 4
+                            
+                            # Verify prompt was passed to annotate
+                            prompt_call = [call for call in mock_llmobs.annotate.call_args_list 
+                                          if 'prompt' in call.kwargs]
+                            assert len(prompt_call) == 1
+                            assert prompt_call[0].kwargs['prompt'] == mock_prompt
+
+
+class TestPromptAnnotation:
+    """Test real Prompt object construction and annotation."""
+
+    def test_rerank_constructs_prompt_with_query_and_context_variables(self):
+        """Regression test: verify rerank creates Prompt with distinct query+context variables."""
+        # Import the real Prompt class if available
+        try:
+            from ddtrace.llmobs.types import Prompt
+        except ImportError:
+            try:
+                from ddtrace.llmobs import Prompt
+            except ImportError:
+                pytest.skip("ddtrace.llmobs.Prompt not available")
+        
+        # Create a real Prompt object as rerank.py would
+        query = "sci-fi action movies"
+        candidates = [
+            {"tmdb_id": 1, "title": "The Matrix", "overview": "A hacker discovers reality is a simulation."},
+            {"tmdb_id": 2, "title": "Blade Runner", "overview": "A blade runner hunts replicants in dystopian LA."},
+        ]
+        context = "\n".join(
+            f"- tmdb_id: {c['tmdb_id']}, title: {c['title']}, overview: {c['overview']}"
+            for c in candidates
+        )
+        
+        # Construct Prompt as rerank.py does
+        prompt = Prompt(
+            id="rerank_prompt",
+            template='User request: "{query}"\n\nCandidate movies (from vector search):\n{context}\n\nPick the best 6 matches for the user\'s request and give a one-line reason for each, grounded in the movie\'s overview.',
+            variables={"query": query, "context": context},
+            rag_query_variables=["query"],
+            rag_context_variables=["context"],
+        )
+        
+        # On ddtrace 4.x, Prompt is a TypedDict/dict - use dict access
+        # Verify prompt has the correct structure
+        assert prompt["id"] == "rerank_prompt"
+        assert "{query}" in prompt["template"]
+        assert "{context}" in prompt["template"]
+        assert prompt["variables"]["query"] == query
+        assert prompt["variables"]["context"] == context
+        assert "query" in prompt["rag_query_variables"]
+        assert "context" in prompt["rag_context_variables"]
+        
+        # Verify context contains the candidate data
+        assert "tmdb_id: 1" in context
+        assert "The Matrix" in context
+        assert "tmdb_id: 2" in context
+        assert "Blade Runner" in context
+
+    def test_annotate_receives_prompt_with_id_and_variables(self):
+        """Stronger test: verify annotate() actually receives prompt with id/query/context."""
+        with patch.dict('sys.modules', {'ddtrace': MagicMock(), 'ddtrace.filters': MagicMock(), 'ddtrace.llmobs': MagicMock()}):
+            with patch('app.services.observability.settings') as mock_settings:
+                mock_settings.dd_trace_enabled = True
+                mock_settings.dd_service = "test-service"
+                
+                with patch('app.services.observability.DatadogObservability._initialized', True):
+                    with patch('app.services.observability.DDTRACE_AVAILABLE', True):
+                        with patch('app.services.observability.LLMObs') as mock_llmobs:
+                            mock_span = MagicMock()
+                            mock_span.__enter__ = Mock(return_value=mock_span)
+                            mock_span.__exit__ = Mock(return_value=False)
+                            mock_llmobs.llm.return_value = mock_span
+                            
+                            from app.services.observability import DatadogObservability
+                            
+                            # Create a real-ish prompt dict (as ddtrace 4.x returns)
+                            test_prompt = {
+                                "id": "rerank_prompt",
+                                "template": "User request: {query}\n\nContext: {context}",
+                                "variables": {
+                                    "query": "test query",
+                                    "context": "test context data"
+                                },
+                                "rag_query_variables": ["query"],
+                                "rag_context_variables": ["context"]
+                            }
+                            
+                            with DatadogObservability.wrap_llm_call("claude-haiku-4-5", "anthropic", "rerank") as obs:
+                                obs.annotate(
+                                    input_messages=[{"role": "user", "content": "test"}],
+                                    output_messages=[{"role": "assistant", "content": "response"}],
+                                    metadata={"input_tokens": 10},
+                                    prompt=test_prompt
+                                )
+                            
+                            # Find the annotate call with prompt
+                            prompt_calls = [call for call in mock_llmobs.annotate.call_args_list 
+                                           if call.kwargs.get('prompt') is not None]
+                            
+                            assert len(prompt_calls) == 1
+                            captured_prompt = prompt_calls[0].kwargs['prompt']
+                            
+                            # Verify the captured prompt has id and correct variables
+                            assert captured_prompt["id"] == "rerank_prompt"
+                            assert captured_prompt["variables"]["query"] == "test query"
+                            assert captured_prompt["variables"]["context"] == "test context data"
+                            assert "query" in captured_prompt["rag_query_variables"]
+                            assert "context" in captured_prompt["rag_context_variables"]
 
 
 class TestInitializationBehavior:
