@@ -3,13 +3,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SearchBox } from "./SearchBox";
 
-const EXAMPLE_LABELS = [
-  "something slow and melancholic",
-  "a movie that feels like a rainy sunday",
-  "high energy, no thinking required",
-  "a heist that goes almost too smoothly",
-];
-
 describe("SearchBox", () => {
   test("renders the mood tag, input, and a disabled Search button", () => {
     render(<SearchBox onSearch={() => {}} isLoading={false} />);
@@ -42,35 +35,58 @@ describe("SearchBox", () => {
     expect(onSearch).not.toHaveBeenCalled();
   });
 
-  test("renders one example chip per placeholder when the input is empty", () => {
-    render(<SearchBox onSearch={() => {}} isLoading={false} />);
-
-    for (const label of EXAMPLE_LABELS) {
-      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
-    }
-  });
-
-  test("clicking a chip searches with its exact label and hides the chips", async () => {
-    const user = userEvent.setup();
-    const onSearch = vi.fn();
-    render(<SearchBox onSearch={onSearch} isLoading={false} />);
-
-    await user.click(screen.getByRole("button", { name: EXAMPLE_LABELS[0] }));
-
-    expect(onSearch).toHaveBeenCalledWith(EXAMPLE_LABELS[0]);
-    expect(screen.getByRole("textbox")).toHaveValue(EXAMPLE_LABELS[0]);
-    expect(
-      screen.queryByRole("button", { name: EXAMPLE_LABELS[1] }),
-    ).not.toBeInTheDocument();
-  });
-
-  test("disables the input, Search button, and chips while loading", () => {
+  test("disables the input and Search button while loading", () => {
     render(<SearchBox onSearch={() => {}} isLoading={true} />);
 
     expect(screen.getByRole("textbox")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Thinking..." })).toBeDisabled();
-    for (const label of EXAMPLE_LABELS) {
-      expect(screen.getByRole("button", { name: label })).toBeDisabled();
-    }
+  });
+
+  test("works as a controlled component when value and onChange are provided", async () => {
+    const user = userEvent.setup();
+    const onSearch = vi.fn();
+    const onChange = vi.fn();
+    
+    const { rerender } = render(
+      <SearchBox 
+        onSearch={onSearch} 
+        isLoading={false}
+        value="initial query"
+        onChange={onChange}
+      />
+    );
+
+    expect(screen.getByRole("textbox")).toHaveValue("initial query");
+
+    await user.type(screen.getByRole("textbox"), "x");
+    expect(onChange).toHaveBeenCalledWith("initial queryx");
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <SearchBox 
+        onSearch={onSearch} 
+        isLoading={false}
+        value="updated query"
+        onChange={onChange}
+      />
+    );
+
+    expect(screen.getByRole("textbox")).toHaveValue("updated query");
+  });
+
+  test("works as an uncontrolled component when value and onChange are not provided", async () => {
+    const user = userEvent.setup();
+    const onSearch = vi.fn();
+    
+    render(<SearchBox onSearch={onSearch} isLoading={false} />);
+
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveValue("");
+
+    await user.type(input, "test query");
+    expect(input).toHaveValue("test query");
+
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    expect(onSearch).toHaveBeenCalledWith("test query");
   });
 });
