@@ -1,18 +1,13 @@
 import type { MovieRecommendation } from "../api";
 import { MovieCard } from "./MovieCard";
 import { useWatchlist } from "../hooks/useWatchlist";
-import { addToPassedMovies, isMoviePassed } from "../lib/watchlist";
 
 interface ResultsGridProps {
   results: MovieRecommendation[];
 }
 
 export function ResultsGrid({ results }: ResultsGridProps) {
-  const { toggleMovie, isInList } = useWatchlist();
-
-  const handlePass = (tmdbId: number) => {
-    addToPassedMovies(tmdbId);
-  };
+  const { toggleMovie, isInList, passMovie, isMoviePassed } = useWatchlist();
 
   const visibleResults = results.filter((movie) => !isMoviePassed(movie.tmdb_id));
 
@@ -28,7 +23,7 @@ export function ResultsGrid({ results }: ResultsGridProps) {
           movie={movie}
           isInWatchlist={isInList(movie.tmdb_id)}
           onToggleWatchlist={toggleMovie}
-          onPass={handlePass}
+          onPass={passMovie}
           showPassButton={true}
         />
       ))}

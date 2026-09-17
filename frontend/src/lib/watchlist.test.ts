@@ -200,4 +200,53 @@ describe("watchlist", () => {
       });
     });
   });
+
+  describe("corrupt schema recovery", () => {
+    it("recovers from non-array watchlist data", () => {
+      localStorage.setItem("moody-watchlist", JSON.stringify({ broken: "data" }));
+      expect(getWatchlist()).toEqual([]);
+    });
+
+    it("filters out invalid watchlist items", () => {
+      const validItem = { ...mockMovie, addedAt: Date.now() };
+      const invalidItem = { tmdb_id: "not-a-number", title: 123 };
+      localStorage.setItem("moody-watchlist", JSON.stringify([validItem, invalidItem]));
+      const watchlist = getWatchlist();
+      expect(watchlist).toHaveLength(1);
+      expect(watchlist[0].tmdb_id).toBe(mockMovie.tmdb_id);
+    });
+
+    it("recovers from non-array passed movies data", () => {
+      localStorage.setItem("moody-passed", JSON.stringify({ broken: "data" }));
+      expect(getPassedMovies().size).toBe(0);
+    });
+
+    it("filters out non-number passed movie IDs", () => {
+      localStorage.setItem("moody-passed", JSON.stringify([123, "invalid", 456, null, undefined]));
+      const passed = getPassedMovies();
+      expect(passed.size).toBe(2);
+      expect(passed.has(123)).toBe(true);
+      expect(passed.has(456)).toBe(true);
+    });
+
+    it("handles missing required movie fields", () => {
+      const invalidMovie = { tmdb_id: 999, title: "Test" };
+      localStorage.setItem("moody-watchlist", JSON.stringify([invalidMovie]));
+      expect(getWatchlist()).toEqual([]);
+    });
+
+    it("handles invalid movie data types", () => {
+      const invalidMovie = {
+        tmdb_id: "string-id",
+        title: 123,
+        poster_path: [],
+        year: "2024",
+        vote_average: "high",
+        genres: "drama",
+        addedAt: Date.now(),
+      };
+      localStorage.setItem("moody-watchlist", JSON.stringify([invalidMovie]));
+      expect(getWatchlist()).toEqual([]);
+    });
+  });
 });

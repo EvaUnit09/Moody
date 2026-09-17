@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useWatchlist } from "../hooks/useWatchlist";
 import { MovieCard } from "./MovieCard";
 import { exportWatchlist, exportWatchlistAsText } from "../lib/watchlist";
@@ -9,6 +10,19 @@ interface WatchlistDrawerProps {
 
 export function WatchlistDrawer({ isOpen, onClose }: WatchlistDrawerProps) {
   const { watchlist, toggleMovie, isInList } = useWatchlist();
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [isOpen, onClose]);
 
   const handleExportJSON = () => {
     const data = exportWatchlist();
@@ -36,10 +50,19 @@ export function WatchlistDrawer({ isOpen, onClose }: WatchlistDrawerProps) {
 
   return (
     <>
-      <div className="drawer-backdrop" onClick={onClose} />
-      <div className="drawer">
+      <div 
+        className="drawer-backdrop" 
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div 
+        className="drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="drawer-title"
+      >
         <div className="drawer-header">
-          <h3 className="drawer-title">My List</h3>
+          <h3 id="drawer-title" className="drawer-title">My List</h3>
           <button
             type="button"
             className="btn btn-icon"

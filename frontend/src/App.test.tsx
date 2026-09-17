@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Movie, MovieRecommendation } from "./api";
 import App from "./App";
+import { WatchlistProvider } from "./hooks/useWatchlist";
 
 const CACHED_MOVIE: Movie = {
   tmdb_id: 1,
@@ -52,7 +53,11 @@ describe("App popular carousel loading", () => {
     readPopularCacheMock.mockReturnValue([CACHED_MOVIE]);
     getPopularMock.mockReturnValue(new Promise(() => {}));
 
-    render(<App />);
+    render(
+      <WatchlistProvider>
+        <App />
+      </WatchlistProvider>
+    );
 
     expect(screen.getByText("Cached Movie")).toBeInTheDocument();
     expect(document.querySelector(".skeleton-block")).not.toBeInTheDocument();
@@ -62,7 +67,11 @@ describe("App popular carousel loading", () => {
     readPopularCacheMock.mockReturnValue(null);
     getPopularMock.mockReturnValue(new Promise(() => {}));
 
-    render(<App />);
+    render(
+      <WatchlistProvider>
+        <App />
+      </WatchlistProvider>
+    );
 
     expect(document.querySelector(".skeleton-block")).toBeInTheDocument();
     expect(screen.queryByText("Cached Movie")).not.toBeInTheDocument();
@@ -80,7 +89,11 @@ describe("App mood chip and recovery integration", () => {
     const user = userEvent.setup();
     recommendMock.mockResolvedValue([RECOMMENDED_MOVIE]);
 
-    render(<App />);
+    render(
+      <WatchlistProvider>
+        <App />
+      </WatchlistProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByText("date night")).toBeInTheDocument();
@@ -104,7 +117,11 @@ describe("App mood chip and recovery integration", () => {
     const user = userEvent.setup();
     recommendMock.mockResolvedValue([]);
 
-    render(<App />);
+    render(
+      <WatchlistProvider>
+        <App />
+      </WatchlistProvider>
+    );
 
     await user.type(screen.getByRole("textbox"), "nonexistent mood");
     await user.click(screen.getByRole("button", { name: "Search" }));
@@ -120,7 +137,11 @@ describe("App mood chip and recovery integration", () => {
     const user = userEvent.setup();
     recommendMock.mockRejectedValue(new Error("Network error"));
 
-    render(<App />);
+    render(
+      <WatchlistProvider>
+        <App />
+      </WatchlistProvider>
+    );
 
     await user.type(screen.getByRole("textbox"), "test query");
     await user.click(screen.getByRole("button", { name: "Search" }));
@@ -138,7 +159,11 @@ describe("App mood chip and recovery integration", () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([RECOMMENDED_MOVIE]);
 
-    render(<App />);
+    render(
+      <WatchlistProvider>
+        <App />
+      </WatchlistProvider>
+    );
 
     await user.type(screen.getByRole("textbox"), "bad query");
     await user.click(screen.getByRole("button", { name: "Search" }));
