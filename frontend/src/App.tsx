@@ -9,6 +9,7 @@ import { CarouselSkeleton } from "./components/CarouselSkeleton";
 import { MoodChips } from "./components/MoodChips";
 import { RecoveryPrompt } from "./components/RecoveryPrompt";
 import { WatchlistDrawer } from "./components/WatchlistDrawer";
+import { ShareButton } from "./components/ShareButton";
 import { useWatchlist } from "./hooks/useWatchlist";
 import "./App.css";
 
@@ -145,6 +146,7 @@ function App() {
           {!error && (
             <div className="results-heading">
               <h6 className="text-muted">matches for &ldquo;{query}&rdquo;</h6>
+              <ShareButton query={query} />
             </div>
           )}
 
