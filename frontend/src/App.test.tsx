@@ -22,6 +22,7 @@ const RECOMMENDED_MOVIE: MovieRecommendation = {
   vote_average: 7.5,
   genres: ["Action"],
   reason: "High energy and thrilling",
+  providers: [],
 };
 
 const { getPopularMock, recommendMock } = vi.hoisted(() => ({

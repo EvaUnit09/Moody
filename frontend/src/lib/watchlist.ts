@@ -23,7 +23,7 @@ function isValidMovie(item: unknown): item is Movie {
 
 function isValidWatchlistItem(item: unknown): item is WatchlistItem {
   if (!isValidMovie(item)) return false;
-  const obj = item as Record<string, unknown>;
+  const obj = item as unknown as Record<string, unknown>;
   return typeof obj.addedAt === "number";
 }
 
