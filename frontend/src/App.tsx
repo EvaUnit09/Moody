@@ -8,6 +8,8 @@ import { PosterCarousel } from "./components/PosterCarousel";
 import { CarouselSkeleton } from "./components/CarouselSkeleton";
 import { MoodChips } from "./components/MoodChips";
 import { RecoveryPrompt } from "./components/RecoveryPrompt";
+import { WatchlistDrawer } from "./components/WatchlistDrawer";
+import { useWatchlist } from "./hooks/useWatchlist";
 import "./App.css";
 
 function getErrorMessage(error: unknown): string {
@@ -29,8 +31,10 @@ function App() {
   const [isPopularLoading, setIsPopularLoading] = useState(
     () => readPopularCache() === null,
   );
+  const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
+  const { watchlist } = useWatchlist();
 
   useEffect(() => {
     const hadCachedMovies = readPopularCache() !== null;
@@ -97,6 +101,26 @@ function App() {
           <span className="app-logo-dot" />
           <span>Moody</span>
         </button>
+        <button
+          type="button"
+          className="btn btn-secondary watchlist-button"
+          onClick={() => setIsWatchlistOpen(true)}
+          aria-label="Open watchlist"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 256 256"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M240,94c0,70-103.79,126.66-108.21,129a8,8,0,0,1-7.58,0C119.79,220.66,16,164,16,94A62.07,62.07,0,0,1,78,32c20.65,0,38.73,8.88,50,23.89C139.27,40.88,157.35,32,178,32A62.07,62.07,0,0,1,240,94Z" />
+          </svg>
+          <span>My List</span>
+          {watchlist.length > 0 && (
+            <span className="tag tag-accent">{watchlist.length}</span>
+          )}
+        </button>
       </header>
 
       <section className="hero">
@@ -133,6 +157,11 @@ function App() {
           {!isLoading && !error && <ResultsGrid results={results} />}
         </section>
       )}
+
+      <WatchlistDrawer
+        isOpen={isWatchlistOpen}
+        onClose={() => setIsWatchlistOpen(false)}
+      />
     </div>
   );
 }
