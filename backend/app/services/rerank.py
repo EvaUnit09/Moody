@@ -3,6 +3,13 @@ from anthropic import AsyncAnthropic
 from app.config import settings
 from app.services.observability import DatadogObservability
 
+try:
+    from ddtrace.llmobs.utils import Prompt
+    PROMPT_AVAILABLE = True
+except ImportError:
+    Prompt = None
+    PROMPT_AVAILABLE = False
+
 RERANK_MODEL = "claude-haiku-4-5"
 TOP_N = 6
 
@@ -51,6 +58,13 @@ async def rerank(query: str, candidates: list[dict]) -> list[dict]:
 
     prompt = _build_prompt(query, candidates)
     
+    # Build context string for LLMObs hallucination eval
+    # Format: each candidate on its own line with tmdb_id, title, and overview
+    context = "\n".join(
+        f"- tmdb_id: {c['tmdb_id']}, title: {c['title']}, overview: {c['overview']}"
+        for c in candidates
+    )
+    
     # Wrap LLM call with LLM Observability context
     with DatadogObservability.wrap_llm_call(
         model=RERANK_MODEL,
@@ -65,7 +79,18 @@ async def rerank(query: str, candidates: list[dict]) -> list[dict]:
             messages=[{"role": "user", "content": prompt}],
         )
         
-        # Annotate with token usage and metadata
+        # Build prompt annotation for hallucination evaluation
+        # The hallucination eval expects distinct query and context variables
+        prompt_annotation = None
+        if PROMPT_AVAILABLE and Prompt is not None:
+            prompt_annotation = Prompt(
+                template='User request: "{query}"\n\nCandidate movies (from vector search):\n{context}\n\nPick the best 6 matches for the user\'s request and give a one-line reason for each, grounded in the movie\'s overview.',
+                variables={"query": query, "context": context},
+                rag_query_variables=["query"],
+                rag_context_variables=["context"],
+            )
+        
+        # Annotate with token usage, metadata, and prompt variables
         obs.annotate(
             input_messages=[{"role": "user", "content": prompt}],
             output_messages=[{"role": "assistant", "content": str(message.content)}],
@@ -75,6 +100,7 @@ async def rerank(query: str, candidates: list[dict]) -> list[dict]:
                 "total_tokens": message.usage.input_tokens + message.usage.output_tokens,
                 "candidate_count": len(candidates),
             },
+            prompt=prompt_annotation,
         )
 
     tool_use = next(block for block in message.content if block.type == "tool_use")
