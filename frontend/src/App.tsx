@@ -103,7 +103,12 @@ function App() {
         {!hasSearched && (
           <MoodChips onMoodSelect={handleSearch} disabled={isLoading} />
         )}
-        <SearchBox onSearch={handleSearch} isLoading={isLoading} />
+        <SearchBox 
+          onSearch={handleSearch} 
+          isLoading={isLoading}
+          value={query}
+          onChange={setQuery}
+        />
       </section>
 
       {!hasSearched && isPopularLoading && <CarouselSkeleton />}
@@ -119,11 +124,9 @@ function App() {
             </div>
           )}
 
-          {error && <p className="error">{error}</p>}
-
           {isLoading && <SkeletonGrid />}
 
-          {!isLoading && !error && results.length === 0 && (
+          {!isLoading && (error || results.length === 0) && (
             <RecoveryPrompt onMoodSelect={handleSearch} />
           )}
 

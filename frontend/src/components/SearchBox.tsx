@@ -12,11 +12,16 @@ const PLACEHOLDER_INTERVAL_MS = 3200;
 interface SearchBoxProps {
   onSearch: (query: string) => void;
   isLoading: boolean;
+  value?: string;
+  onChange?: (value: string) => void;
 }
 
-export function SearchBox({ onSearch, isLoading }: SearchBoxProps) {
-  const [query, setQuery] = useState("");
+export function SearchBox({ onSearch, isLoading, value, onChange }: SearchBoxProps) {
+  const [internalQuery, setInternalQuery] = useState("");
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
+  
+  const isControlled = value !== undefined;
+  const query = isControlled ? value : internalQuery;
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -25,17 +30,20 @@ export function SearchBox({ onSearch, isLoading }: SearchBoxProps) {
     return () => clearInterval(timer);
   }, []);
 
+  function handleInputChange(newValue: string) {
+    if (isControlled) {
+      onChange?.(newValue);
+    } else {
+      setInternalQuery(newValue);
+    }
+  }
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const trimmed = query.trim();
     if (trimmed) {
       onSearch(trimmed);
     }
-  }
-
-  function handleChipClick(example: string) {
-    setQuery(example);
-    onSearch(example);
   }
 
   return (
@@ -46,7 +54,7 @@ export function SearchBox({ onSearch, isLoading }: SearchBoxProps) {
         type="text"
         className="search-box-input"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => handleInputChange(e.target.value)}
         placeholder={PLACEHOLDERS[placeholderIdx]}
         disabled={isLoading}
       />
@@ -75,25 +83,6 @@ export function SearchBox({ onSearch, isLoading }: SearchBoxProps) {
           </svg>
         </button>
       </div>
-
-      {!query && (
-        <div className="search-box-chips">
-          {PLACEHOLDERS.map((example) => {
-            const label = example.replace(/\.\.\.$/, "");
-            return (
-              <button
-                key={example}
-                type="button"
-                className="tag tag-outline search-box-chip"
-                disabled={isLoading}
-                onClick={() => handleChipClick(label)}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      )}
     </form>
   );
 }
