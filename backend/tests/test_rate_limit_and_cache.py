@@ -3,16 +3,19 @@ Tests for rate limiting and cache hardening.
 
 Tests cover:
 - Rate limiting on /recommend endpoint
-- Cache key normalization (punctuation, whitespace)
+- Other routes unaffected by rate limiting
+- Cache key normalization (punctuation, whitespace, hyphen/space)
 - Variable TTL for popular moods
+- Word-boundary matching (no false positives)
 - Cache hit/miss logging
 """
 
 import os
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from fastapi.testclient import TestClient
 import time
+
+import pytest
+from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock, patch
 
 # Set dummy env vars before importing app
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
@@ -40,8 +43,14 @@ class TestCacheNormalization:
     def test_normalize_query_punctuation(self):
         """normalize_query should remove/normalize punctuation."""
         assert cache.normalize_query("What's a good movie?") == "whats a good movie"
-        assert cache.normalize_query("Sci-fi, please!") == "sci-fi please"
         assert cache.normalize_query("Action... drama???") == "action drama"
+
+    def test_normalize_query_hyphen_to_space(self):
+        """normalize_query should convert hyphens to spaces for collision."""
+        assert cache.normalize_query("sci-fi action") == "sci fi action"
+        assert cache.normalize_query("sci fi action") == "sci fi action"
+        # These should normalize to the same value
+        assert cache.normalize_query("sci-fi") == cache.normalize_query("sci fi")
 
     def test_normalize_query_whitespace(self):
         """normalize_query should collapse multiple spaces."""
@@ -59,9 +68,11 @@ class TestCacheNormalization:
         assert cache.get("Sci-Fi Action") == results
         assert cache.get("  sci-fi action  ") == results
         assert cache.get("sci-fi, action!") == results
+        # Hyphen/space equivalence
+        assert cache.get("sci fi action") == results
         
         # Verify it's all cache hits
-        assert cache._cache_stats["hits"] == 4
+        assert cache._cache_stats["hits"] == 5
         assert cache._cache_stats["misses"] == 0
 
     def test_cache_stats(self):
@@ -96,12 +107,36 @@ class TestPopularMoodTTL:
         cache._cache.clear()
 
     def test_is_popular_mood(self):
-        """_is_popular_mood should detect popular keywords."""
+        """_is_popular_mood should detect popular keywords with word boundaries."""
+        # Should match
         assert cache._is_popular_mood("romantic comedy")
         assert cache._is_popular_mood("Horror movie please")
         assert cache._is_popular_mood("something for Friday night")
         assert cache._is_popular_mood("A feel-good family movie")
+        assert cache._is_popular_mood("I'm feeling sad")
+        assert cache._is_popular_mood("sci-fi adventure")
+        assert cache._is_popular_mood("sci fi adventure")  # hyphen/space equivalence
+        
+        # Should NOT match
         assert not cache._is_popular_mood("obscure indie film from 1973")
+
+    def test_is_popular_mood_no_false_positives(self):
+        """_is_popular_mood should not match substrings (word boundaries)."""
+        # "sad" should NOT match in "crusade"
+        assert not cache._is_popular_mood("crusade movie")
+        assert not cache._is_popular_mood("ambassador documentary")
+        
+        # But should match as a word
+        assert cache._is_popular_mood("sad movie")
+        assert cache._is_popular_mood("I'm sad today")
+
+    def test_hyphen_space_popular_detection(self):
+        """Popular mood detection should work for both sci-fi and sci fi."""
+        # Both should be detected as popular
+        assert cache._is_popular_mood("sci-fi")
+        assert cache._is_popular_mood("sci fi")
+        assert cache._is_popular_mood("sci-fi movie")
+        assert cache._is_popular_mood("sci fi movie")
 
     def test_popular_mood_longer_ttl(self):
         """Popular mood queries should get longer TTL."""
@@ -214,6 +249,57 @@ class TestRateLimiting:
                     assert "message" in data
                     assert isinstance(data["message"], str)
                     assert len(data["message"]) > 0
+
+    def test_other_routes_not_rate_limited(self):
+        """Other routes should not be affected by /recommend rate limiting."""
+        client = TestClient(app)
+        
+        # First, exhaust the /recommend rate limit
+        with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
+            with patch('app.routers.recommend.search_similar', new_callable=AsyncMock) as mock_search:
+                with patch('app.routers.recommend.rerank', new_callable=AsyncMock) as mock_rerank:
+                    mock_embed.return_value = [0.1] * 1536
+                    mock_search.return_value = []
+                    mock_rerank.return_value = [{
+                        "tmdb_id": 1,
+                        "title": "Test",
+                        "poster_path": "/test.jpg",
+                        "year": 2024,
+                        "vote_average": 7.5,
+                        "genres": ["Drama"],
+                        "reason": "Good movie"
+                    }]
+                    
+                    # Exhaust rate limit on /recommend
+                    for i in range(10):
+                        client.post("/recommend", json={"query": f"query {i}"})
+                    
+                    # Verify /recommend is rate limited
+                    response = client.post("/recommend", json={"query": "one more"})
+                    assert response.status_code == 429
+        
+        # Now test other routes - they should still work
+        # Mock popular movies for /popular endpoint
+        with patch('app.routers.popular.get_popular_movies', new_callable=AsyncMock) as mock_popular:
+            mock_popular.return_value = [
+                {
+                    "tmdb_id": 1,
+                    "title": "Popular Movie",
+                    "poster_path": "/popular.jpg",
+                    "year": 2024,
+                    "vote_average": 8.0,
+                    "genres": ["Action"]
+                }
+            ]
+            
+            # /popular should not be rate limited
+            response = client.get("/popular")
+            assert response.status_code == 200
+            
+            # /health should not be rate limited
+            response = client.get("/health")
+            assert response.status_code == 200
+            assert response.json() == {"status": "ok"}
 
 
 class TestCacheWithRateLimit:

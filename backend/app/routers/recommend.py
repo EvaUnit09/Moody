@@ -2,7 +2,6 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app import cache
 from app.db import search_similar
@@ -14,9 +13,37 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+def get_rate_limit_key(request: Request) -> str:
+    """Extract rate limit key from request.
+    
+    For Railway deployments behind a proxy, attempts to use X-Forwarded-For header.
+    
+    LIMITATION: When using in-memory storage with multiple Railway replicas:
+    - Each replica maintains its own rate limit state
+    - Effective limit is N×10/min where N = number of replicas
+    - Clients may be load-balanced across replicas, making the limit less predictable
+    
+    For production with strict rate limits, consider:
+    - Single replica (prevents shared state issues)
+    - Shared store like Redis (requires adding redis to stack)
+    - Documenting the multiplied limit in API docs
+    """
+    # Check X-Forwarded-For header for Railway proxy
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # Use the first (client) IP from the chain
+        return forwarded_for.split(",")[0].strip()
+    
+    # Fallback to direct connection (local dev, direct access)
+    return request.client.host if request.client else "unknown"
+
+
 # Create rate limiter instance
 # 10 requests per minute per IP for /recommend endpoint
-limiter = Limiter(key_func=get_remote_address)
+# NOTE: Uses in-memory storage. With multiple Railway replicas, effective limit
+# is multiplied (N replicas ≈ N×10/min). See get_rate_limit_key docstring.
+limiter = Limiter(key_func=get_rate_limit_key)
 
 CANDIDATE_LIMIT = 25
 
@@ -30,7 +57,7 @@ async def recommend(body: RecommendRequest, request: Request) -> RecommendRespon
 
     cached = cache.get(query)
     if cached is not None:
-        logger.info(f"Cache hit for query={query!r}")
+        # Cache hit logged at DEBUG level in cache.get()
         return RecommendResponse(results=cached)
 
     logger.debug(f"Cache miss for query={query!r}")

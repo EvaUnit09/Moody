@@ -9,6 +9,7 @@ POPULAR_CACHE_TTL_SECONDS = 7200  # 2 hours for popular moods
 
 # Popular mood keywords that get longer TTL
 # These are common mood/scenario queries that tend to repeat
+# Note: word-boundary matching prevents false positives (e.g., "sad" won't match "crusade")
 POPULAR_MOOD_KEYWORDS = {
     "comedy",
     "romantic",
@@ -17,7 +18,7 @@ POPULAR_MOOD_KEYWORDS = {
     "action",
     "thriller",
     "drama",
-    "sci-fi",
+    "sci fi",  # normalized form (hyphens → spaces)
     "science fiction",
     "fantasy",
     "feel good",
@@ -46,14 +47,18 @@ def normalize_query(query: str) -> str:
     
     - Convert to lowercase
     - Strip leading/trailing whitespace
-    - Normalize punctuation (remove/collapse)
-    - Normalize whitespace (collapse multiple spaces)
+    - Normalize hyphens to spaces (sci-fi → sci fi for collision)
+    - Remove other punctuation
+    - Collapse multiple spaces
     """
     # Lowercase and strip
     normalized = query.strip().lower()
     
-    # Remove punctuation except spaces and hyphens (for sci-fi, etc)
-    normalized = re.sub(r"[^\w\s-]", "", normalized)
+    # Normalize hyphens to spaces first (sci-fi → sci fi)
+    normalized = normalized.replace("-", " ")
+    
+    # Remove other punctuation
+    normalized = re.sub(r"[^\w\s]", "", normalized)
     
     # Collapse multiple spaces
     normalized = re.sub(r"\s+", " ", normalized)
@@ -62,9 +67,25 @@ def normalize_query(query: str) -> str:
 
 
 def _is_popular_mood(query: str) -> bool:
-    """Check if query contains popular mood keywords."""
+    """Check if query contains popular mood keywords with word boundaries.
+    
+    Uses word boundaries to avoid false positives like "sad" matching in "crusade".
+    """
     normalized = normalize_query(query)
-    return any(keyword in normalized for keyword in POPULAR_MOOD_KEYWORDS)
+    
+    for keyword in POPULAR_MOOD_KEYWORDS:
+        # Use word boundaries for single-word keywords, exact phrase match for multi-word
+        if " " in keyword:
+            # Multi-word: exact substring match (already safe)
+            if keyword in normalized:
+                return True
+        else:
+            # Single-word: use word boundaries to prevent partial matches
+            pattern = rf"\b{re.escape(keyword)}\b"
+            if re.search(pattern, normalized):
+                return True
+    
+    return False
 
 
 def get(query: str) -> list[dict] | None:
@@ -84,6 +105,7 @@ def get(query: str) -> list[dict] | None:
 
     _cache_stats["hits"] += 1
     _log_cache_stats()
+    logger.debug(f"Cache hit for query={query!r}")
     return results
 
 
@@ -98,13 +120,13 @@ def store(query: str, results: list[dict]) -> None:
 
 
 def _log_cache_stats() -> None:
-    """Log cache hit rate periodically."""
+    """Log cache hit rate periodically at DEBUG level."""
     total = _cache_stats["hits"] + _cache_stats["misses"]
     
-    # Log stats every 10 requests
+    # Log stats every 10 requests at DEBUG level (not INFO)
     if total > 0 and total % 10 == 0:
         hit_rate = (_cache_stats["hits"] / total) * 100
-        logger.info(
+        logger.debug(
             f"Cache stats: hits={_cache_stats['hits']} "
             f"misses={_cache_stats['misses']} "
             f"hit_rate={hit_rate:.1f}% "
