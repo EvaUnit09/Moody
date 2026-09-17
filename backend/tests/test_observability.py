@@ -159,7 +159,8 @@ class TestLLMObsContextManager:
             with patch('app.services.observability.settings') as mock_settings:
                 mock_settings.dd_trace_enabled = True
                 mock_settings.dd_service = "test-service"
-                
+                mock_settings.dd_llmobs_ml_app = None
+
                 with patch('app.services.observability.DatadogObservability._initialized', True):
                     with patch('app.services.observability.DDTRACE_AVAILABLE', True):
                         with patch('app.services.observability.LLMObs') as mock_llmobs:
@@ -168,9 +169,9 @@ class TestLLMObsContextManager:
                             mock_span.__enter__ = Mock(return_value=mock_span)
                             mock_span.__exit__ = Mock(return_value=False)
                             mock_llmobs.llm.return_value = mock_span
-                            
+
                             from app.services.observability import DatadogObservability
-                            
+
                             # Test the full enabled path
                             with DatadogObservability.wrap_llm_call("claude-haiku-4-5", "anthropic", "rerank") as obs:
                                 # Annotate should work
@@ -179,21 +180,50 @@ class TestLLMObsContextManager:
                                     output_messages=[{"role": "assistant", "content": "test response"}],
                                     metadata={"input_tokens": 10, "output_tokens": 20}
                                 )
-                            
+
                             # Verify LLMObs.llm was called with correct params
+                            # (falls back to dd_service when dd_llmobs_ml_app is unset)
                             mock_llmobs.llm.assert_called_once_with(
                                 model_name="claude-haiku-4-5",
                                 model_provider="anthropic",
                                 name="rerank",
                                 ml_app="test-service",
                             )
-                            
+
                             # Verify annotate was called 3 times (once for each type of data)
                             assert mock_llmobs.annotate.call_count == 3
-                            
+
                             # Verify span context was entered and exited
                             mock_span.__enter__.assert_called_once()
                             mock_span.__exit__.assert_called_once()
+
+    def test_wrap_llm_call_uses_configured_ml_app_over_service(self):
+        """ml_app should prefer settings.dd_llmobs_ml_app over dd_service when set."""
+        with patch.dict('sys.modules', {'ddtrace': MagicMock(), 'ddtrace.filters': MagicMock(), 'ddtrace.llmobs': MagicMock()}):
+            with patch('app.services.observability.settings') as mock_settings:
+                mock_settings.dd_trace_enabled = True
+                mock_settings.dd_service = "test-service"
+                mock_settings.dd_llmobs_ml_app = "moody"
+
+                with patch('app.services.observability.DatadogObservability._initialized', True):
+                    with patch('app.services.observability.DDTRACE_AVAILABLE', True):
+                        with patch('app.services.observability.LLMObs') as mock_llmobs:
+                            mock_span = MagicMock()
+                            mock_span.__enter__ = Mock(return_value=mock_span)
+                            mock_span.__exit__ = Mock(return_value=False)
+                            mock_llmobs.llm.return_value = mock_span
+
+                            from app.services.observability import DatadogObservability
+
+                            with DatadogObservability.wrap_llm_call("claude-haiku-4-5", "anthropic", "rerank"):
+                                pass
+
+                            mock_llmobs.llm.assert_called_once_with(
+                                model_name="claude-haiku-4-5",
+                                model_provider="anthropic",
+                                name="rerank",
+                                ml_app="moody",
+                            )
 
 
 class TestInitializationBehavior:

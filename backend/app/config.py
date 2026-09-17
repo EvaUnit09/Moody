@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     dd_service: str = "movie-rec-backend"
     dd_env: str = "dev"
     dd_version: str | None = None
+    dd_site: str = "datadoghq.com"
+    dd_llmobs_ml_app: str | None = None  # Falls back to dd_service when unset
     # Only enable tracing when explicitly requested AND ddtrace is available
     # This prevents agent connection attempts when disabled
     dd_trace_enabled: bool = False
