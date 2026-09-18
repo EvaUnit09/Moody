@@ -11,6 +11,11 @@ import {
   type WatchlistItem,
 } from "../lib/watchlist";
 
+interface PassedMovieRecord {
+  tmdbId: number;
+  timestamp: number;
+}
+
 interface WatchlistContextValue {
   watchlist: WatchlistItem[];
   passedMovies: Set<number>;
@@ -21,6 +26,7 @@ interface WatchlistContextValue {
   passMovie: (tmdbId: number) => void;
   unpassMovie: (tmdbId: number) => void;
   isMoviePassed: (tmdbId: number) => boolean;
+  lastPassedMovie: PassedMovieRecord | null;
 }
 
 const WatchlistContext = createContext<WatchlistContextValue | null>(null);
@@ -28,6 +34,7 @@ const WatchlistContext = createContext<WatchlistContextValue | null>(null);
 export function WatchlistProvider({ children }: { children: ReactNode }) {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(() => getWatchlist());
   const [passedMovies, setPassedMovies] = useState<Set<number>>(() => getPassedMovies());
+  const [lastPassedMovie, setLastPassedMovie] = useState<PassedMovieRecord | null>(null);
 
   const refresh = useCallback(() => {
     setWatchlist(getWatchlist());
@@ -68,11 +75,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const passMovie = useCallback((tmdbId: number) => {
     addToPassedStorage(tmdbId);
+    setLastPassedMovie({ tmdbId, timestamp: Date.now() });
     refresh();
   }, [refresh]);
 
   const unpassMovie = useCallback((tmdbId: number) => {
     removeFromPassedStorage(tmdbId);
+    setLastPassedMovie((prev) => (prev?.tmdbId === tmdbId ? null : prev));
     refresh();
   }, [refresh]);
 
@@ -90,6 +99,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     passMovie,
     unpassMovie,
     isMoviePassed: isMoviePassedFn,
+    lastPassedMovie,
   };
 
   return (
