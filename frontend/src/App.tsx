@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { getPopular, recommend, type Movie, type MovieRecommendation } from "./api";
 import { readPopularCache, writePopularCache } from "./lib/popularCache";
+import { getRecentMoods, addRecentMood, clearRecentMoods } from "./lib/recentMoods";
 import { SearchBox } from "./components/SearchBox";
 import { ResultsGrid } from "./components/ResultsGrid";
 import { SkeletonGrid } from "./components/SkeletonGrid";
 import { PosterCarousel } from "./components/PosterCarousel";
 import { CarouselSkeleton } from "./components/CarouselSkeleton";
 import { MoodChips } from "./components/MoodChips";
+import { RecentChips } from "./components/RecentChips";
 import { RecoveryPrompt } from "./components/RecoveryPrompt";
 import { WatchlistDrawer } from "./components/WatchlistDrawer";
 import { ShareButton } from "./components/ShareButton";
@@ -33,6 +35,7 @@ function App() {
     () => readPopularCache() === null,
   );
   const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
+  const [recentMoods, setRecentMoods] = useState<string[]>(() => getRecentMoods());
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
   const { watchlist } = useWatchlist();
@@ -64,7 +67,13 @@ function App() {
     setResults([]);
     setError(null);
     setHasSearched(false);
+    setRecentMoods(getRecentMoods());
     window.history.pushState(null, "", window.location.pathname);
+  }
+
+  function handleClearRecentMoods() {
+    clearRecentMoods();
+    setRecentMoods([]);
   }
 
   async function handleSearch(searchQuery: string) {
@@ -83,6 +92,8 @@ function App() {
       const movies = await recommend(searchQuery, controller.signal);
       if (requestIdRef.current !== requestId) return;
       setResults(movies);
+      addRecentMood(searchQuery);
+      setRecentMoods(getRecentMoods());
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       if (requestIdRef.current !== requestId) return;
@@ -126,7 +137,15 @@ function App() {
 
       <section className="hero">
         {!hasSearched && (
-          <MoodChips onMoodSelect={handleSearch} disabled={isLoading} />
+          <>
+            <RecentChips
+              recentMoods={recentMoods}
+              onMoodSelect={handleSearch}
+              onClearAll={handleClearRecentMoods}
+              disabled={isLoading}
+            />
+            <MoodChips onMoodSelect={handleSearch} disabled={isLoading} />
+          </>
         )}
         <SearchBox 
           onSearch={handleSearch} 
