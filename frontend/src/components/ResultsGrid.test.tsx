@@ -38,6 +38,28 @@ const mockMovie3: MovieRecommendation = {
   providers: [],
 };
 
+const mockMovie4: MovieRecommendation = {
+  tmdb_id: 101,
+  title: "Alpha Movie",
+  poster_path: "/alpha.jpg",
+  year: 2021,
+  vote_average: 7.0,
+  genres: ["Sci-Fi"],
+  reason: "Mind-bending sci-fi",
+  providers: [],
+};
+
+const mockMovie5: MovieRecommendation = {
+  tmdb_id: 202,
+  title: "Zebra Movie",
+  poster_path: "/zebra.jpg",
+  year: 2025,
+  vote_average: 6.5,
+  genres: ["Documentary"],
+  reason: "Fascinating documentary",
+  providers: [],
+};
+
 describe("ResultsGrid", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -53,6 +75,19 @@ describe("ResultsGrid", () => {
     expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
     expect(screen.getByText("Test Movie 2")).toBeInTheDocument();
     expect(screen.getByText("Test Movie 3")).toBeInTheDocument();
+  });
+
+  it("renders sort pills", () => {
+    render(
+      <WatchlistProvider>
+        <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
+      </WatchlistProvider>
+    );
+
+    expect(screen.getByText("Best match")).toBeInTheDocument();
+    expect(screen.getByText("Highest rated")).toBeInTheDocument();
+    expect(screen.getByText("Newest")).toBeInTheDocument();
+    expect(screen.getByText("Title A–Z")).toBeInTheDocument();
   });
 
   it("returns null when no results", () => {
@@ -165,6 +200,151 @@ describe("ResultsGrid", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("Add to watchlist")).toBeInTheDocument();
     });
+  });
+});
+
+describe("ResultsGrid Sorting", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("sorts by highest rated", async () => {
+    const user = userEvent.setup();
+    render(
+      <WatchlistProvider>
+        <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
+      </WatchlistProvider>
+    );
+
+    await user.click(screen.getByText("Highest rated"));
+
+    const movieCards = screen.getAllByRole("img");
+    expect(movieCards[0]).toHaveAttribute("alt", "Test Movie 3 poster");
+    expect(movieCards[1]).toHaveAttribute("alt", "Test Movie 1 poster");
+    expect(movieCards[2]).toHaveAttribute("alt", "Test Movie 2 poster");
+  });
+
+  it("sorts by newest year", async () => {
+    const user = userEvent.setup();
+    render(
+      <WatchlistProvider>
+        <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3, mockMovie5]} />
+      </WatchlistProvider>
+    );
+
+    await user.click(screen.getByText("Newest"));
+
+    const movieCards = screen.getAllByRole("img");
+    expect(movieCards[0]).toHaveAttribute("alt", "Zebra Movie poster");
+    expect(movieCards[1]).toHaveAttribute("alt", "Test Movie 1 poster");
+    expect(movieCards[2]).toHaveAttribute("alt", "Test Movie 2 poster");
+    expect(movieCards[3]).toHaveAttribute("alt", "Test Movie 3 poster");
+  });
+
+  it("sorts by title A-Z", async () => {
+    const user = userEvent.setup();
+    render(
+      <WatchlistProvider>
+        <ResultsGrid results={[mockMovie1, mockMovie4, mockMovie5]} />
+      </WatchlistProvider>
+    );
+
+    await user.click(screen.getByText("Title A–Z"));
+
+    const movieCards = screen.getAllByRole("img");
+    expect(movieCards[0]).toHaveAttribute("alt", "Alpha Movie poster");
+    expect(movieCards[1]).toHaveAttribute("alt", "Test Movie 1 poster");
+    expect(movieCards[2]).toHaveAttribute("alt", "Zebra Movie poster");
+  });
+
+  it("restores original API order when selecting best match", async () => {
+    const user = userEvent.setup();
+    render(
+      <WatchlistProvider>
+        <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
+      </WatchlistProvider>
+    );
+
+    await user.click(screen.getByText("Highest rated"));
+    let movieCards = screen.getAllByRole("img");
+    expect(movieCards[0]).toHaveAttribute("alt", "Test Movie 3 poster");
+
+    await user.click(screen.getByText("Best match"));
+    movieCards = screen.getAllByRole("img");
+    expect(movieCards[0]).toHaveAttribute("alt", "Test Movie 1 poster");
+    expect(movieCards[1]).toHaveAttribute("alt", "Test Movie 2 poster");
+    expect(movieCards[2]).toHaveAttribute("alt", "Test Movie 3 poster");
+  });
+
+  it("handles movies with null ratings", async () => {
+    const movieWithNullRating: MovieRecommendation = {
+      ...mockMovie1,
+      tmdb_id: 999,
+      title: "No Rating Movie",
+      vote_average: null,
+    };
+
+    const user = userEvent.setup();
+    render(
+      <WatchlistProvider>
+        <ResultsGrid results={[mockMovie1, movieWithNullRating, mockMovie3]} />
+      </WatchlistProvider>
+    );
+
+    await user.click(screen.getByText("Highest rated"));
+
+    const movieCards = screen.getAllByRole("img");
+    expect(movieCards[0]).toHaveAttribute("alt", "Test Movie 3 poster");
+    expect(movieCards[1]).toHaveAttribute("alt", "Test Movie 1 poster");
+    expect(movieCards[2]).toHaveAttribute("alt", "No Rating Movie poster");
+  });
+
+  it("handles movies with null years", async () => {
+    const movieWithNullYear: MovieRecommendation = {
+      ...mockMovie1,
+      tmdb_id: 998,
+      title: "No Year Movie",
+      year: null,
+    };
+
+    const user = userEvent.setup();
+    render(
+      <WatchlistProvider>
+        <ResultsGrid results={[mockMovie1, movieWithNullYear, mockMovie3]} />
+      </WatchlistProvider>
+    );
+
+    await user.click(screen.getByText("Newest"));
+
+    const movieCards = screen.getAllByRole("img");
+    expect(movieCards[0]).toHaveAttribute("alt", "Test Movie 1 poster");
+    expect(movieCards[1]).toHaveAttribute("alt", "Test Movie 3 poster");
+    expect(movieCards[2]).toHaveAttribute("alt", "No Year Movie poster");
+  });
+
+  it("maintains sort when passing movies", async () => {
+    const user = userEvent.setup();
+    render(
+      <WatchlistProvider>
+        <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
+      </WatchlistProvider>
+    );
+
+    await user.click(screen.getByText("Highest rated"));
+
+    let movieCards = screen.getAllByRole("img");
+    expect(movieCards[0]).toHaveAttribute("alt", "Test Movie 3 poster");
+
+    const passButtons = screen.getAllByLabelText("Pass on this recommendation");
+    await user.click(passButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Test Movie 3")).not.toBeInTheDocument();
+    });
+
+    movieCards = screen.getAllByRole("img");
+    expect(movieCards[0]).toHaveAttribute("alt", "Test Movie 1 poster");
+    expect(movieCards[1]).toHaveAttribute("alt", "Test Movie 2 poster");
   });
 });
 
