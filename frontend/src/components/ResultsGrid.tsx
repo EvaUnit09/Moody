@@ -4,9 +4,11 @@ import { useWatchlist } from "../hooks/useWatchlist";
 
 interface ResultsGridProps {
   results: MovieRecommendation[];
+  currentQuery?: string;
+  onMoreLikeThis?: (title: string, currentQuery: string) => void;
 }
 
-export function ResultsGrid({ results }: ResultsGridProps) {
+export function ResultsGrid({ results, currentQuery = "", onMoreLikeThis }: ResultsGridProps) {
   const { toggleMovie, isInList, passMovie, isMoviePassed } = useWatchlist();
 
   const visibleResults = results.filter((movie) => !isMoviePassed(movie.tmdb_id));
@@ -14,6 +16,10 @@ export function ResultsGrid({ results }: ResultsGridProps) {
   if (visibleResults.length === 0) {
     return null;
   }
+
+  const handleMoreLikeThis = onMoreLikeThis && currentQuery
+    ? (title: string) => onMoreLikeThis(title, currentQuery)
+    : undefined;
 
   return (
     <div className="results-grid">
@@ -25,6 +31,7 @@ export function ResultsGrid({ results }: ResultsGridProps) {
           onToggleWatchlist={toggleMovie}
           onPass={passMovie}
           showPassButton={true}
+          onMoreLikeThis={handleMoreLikeThis}
         />
       ))}
     </div>

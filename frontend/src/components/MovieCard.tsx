@@ -10,6 +10,7 @@ interface MovieCardProps {
   onToggleWatchlist?: (movie: Movie) => void;
   onPass?: (tmdbId: number) => void;
   showPassButton?: boolean;
+  onMoreLikeThis?: (title: string) => void;
 }
 
 export function MovieCard({ 
@@ -18,6 +19,7 @@ export function MovieCard({
   onToggleWatchlist,
   onPass,
   showPassButton = false,
+  onMoreLikeThis,
 }: MovieCardProps) {
   const [isLoaded, setIsLoaded] = useState(false);
   const posterClassName = `movie-card-poster${isLoaded ? " movie-card-poster-loaded" : ""}`;
@@ -33,6 +35,12 @@ export function MovieCard({
     e.preventDefault();
     e.stopPropagation();
     onPass?.(movie.tmdb_id);
+  };
+
+  const handleMoreLikeThis = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onMoreLikeThis?.(movie.title);
   };
 
   return (
@@ -101,8 +109,19 @@ export function MovieCard({
             </span>
           </div>
         )}
-        {onToggleWatchlist && (
-          <div className="movie-card-actions">
+        <div className="movie-card-actions">
+          {onMoreLikeThis && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={handleMoreLikeThis}
+              aria-label="Find more like this"
+              title="Find more like this"
+            >
+              More like this
+            </button>
+          )}
+          {onToggleWatchlist && (
             <button
               type="button"
               className="btn btn-ghost btn-icon"
@@ -124,27 +143,27 @@ export function MovieCard({
                 )}
               </svg>
             </button>
-            {showPassButton && onPass && (
-              <button
-                type="button"
-                className="btn btn-ghost btn-icon"
-                onClick={handlePass}
-                aria-label="Pass on this recommendation"
-                title="Pass on this recommendation"
+          )}
+          {showPassButton && onPass && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-icon"
+              onClick={handlePass}
+              aria-label="Pass on this recommendation"
+              title="Pass on this recommendation"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 256 256"
+                fill="currentColor"
+                aria-hidden="true"
               >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 256 256"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z" />
-                </svg>
-              </button>
-            )}
-          </div>
-        )}
+                <path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

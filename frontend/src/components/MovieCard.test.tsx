@@ -1,5 +1,6 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MovieCard } from "./MovieCard";
 import type { MovieRecommendation } from "../api";
 
@@ -186,5 +187,51 @@ describe("MovieCard", () => {
       "href",
       "https://www.themoviedb.org/movie/550",
     );
+  });
+
+  test("renders 'More like this' button when onMoreLikeThis provided", () => {
+    const onMoreLikeThis = vi.fn();
+    render(<MovieCard movie={MOCK_MOVIE} onMoreLikeThis={onMoreLikeThis} />);
+
+    const button = screen.getByRole("button", { name: "Find more like this" });
+    expect(button).toBeInTheDocument();
+    expect(button).toHaveTextContent("More like this");
+  });
+
+  test("does not render 'More like this' button when onMoreLikeThis not provided", () => {
+    render(<MovieCard movie={MOCK_MOVIE} />);
+
+    const button = screen.queryByRole("button", { name: "Find more like this" });
+    expect(button).not.toBeInTheDocument();
+  });
+
+  test("calls onMoreLikeThis with movie title when button clicked", async () => {
+    const user = userEvent.setup();
+    const onMoreLikeThis = vi.fn();
+    render(<MovieCard movie={MOCK_MOVIE} onMoreLikeThis={onMoreLikeThis} />);
+
+    const button = screen.getByRole("button", { name: "Find more like this" });
+    await user.click(button);
+
+    expect(onMoreLikeThis).toHaveBeenCalledTimes(1);
+    expect(onMoreLikeThis).toHaveBeenCalledWith("Fight Club");
+  });
+
+  test("'More like this' button click does not propagate", async () => {
+    const user = userEvent.setup();
+    const onMoreLikeThis = vi.fn();
+    const cardClickHandler = vi.fn();
+    
+    render(
+      <div onClick={cardClickHandler}>
+        <MovieCard movie={MOCK_MOVIE} onMoreLikeThis={onMoreLikeThis} />
+      </div>
+    );
+
+    const button = screen.getByRole("button", { name: "Find more like this" });
+    await user.click(button);
+
+    expect(onMoreLikeThis).toHaveBeenCalledTimes(1);
+    expect(cardClickHandler).not.toHaveBeenCalled();
   });
 });
