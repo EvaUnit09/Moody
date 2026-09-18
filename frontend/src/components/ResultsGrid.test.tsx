@@ -3,7 +3,19 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ResultsGrid } from "./ResultsGrid";
 import { WatchlistProvider } from "../hooks/useWatchlist";
+import { ToastProvider } from "../contexts/ToastContext";
 import type { MovieRecommendation } from "../api";
+import type { ReactNode } from "react";
+
+function TestWrapper({ children }: { children: ReactNode }) {
+  return (
+    <WatchlistProvider>
+      <ToastProvider>
+        {children}
+      </ToastProvider>
+    </WatchlistProvider>
+  );
+}
 
 const mockMovie1: MovieRecommendation = {
   tmdb_id: 123,
@@ -45,9 +57,9 @@ describe("ResultsGrid", () => {
 
   it("renders all movies initially", () => {
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
@@ -57,9 +69,9 @@ describe("ResultsGrid", () => {
 
   it("returns null when no results", () => {
     const { container } = render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(container.firstChild).toBeNull();
@@ -68,9 +80,9 @@ describe("ResultsGrid", () => {
   it("immediately hides passed movie from grid", async () => {
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
@@ -90,9 +102,9 @@ describe("ResultsGrid", () => {
   it("hides multiple passed movies", async () => {
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     const passButtons = screen.getAllByLabelText("Pass on this recommendation");
@@ -115,10 +127,10 @@ describe("ResultsGrid", () => {
 
   it("returns null when all movies are passed", async () => {
     const user = userEvent.setup();
-    const { container } = render(
-      <WatchlistProvider>
+    render(
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
@@ -127,17 +139,19 @@ describe("ResultsGrid", () => {
     await user.click(passButton);
 
     await waitFor(() => {
-      expect(container.firstChild).toBeNull();
+      expect(screen.queryByText("Test Movie 1")).not.toBeInTheDocument();
     });
+
+    expect(document.querySelector(".results-grid")).not.toBeInTheDocument();
   });
 
   it("filters already-passed movies on mount", () => {
     localStorage.setItem("moody-passed", JSON.stringify([123, 456]));
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.queryByText("Test Movie 1")).not.toBeInTheDocument();
@@ -148,9 +162,9 @@ describe("ResultsGrid", () => {
   it("toggles watchlist state correctly", async () => {
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     const heartButton = screen.getByLabelText("Add to watchlist");
@@ -164,6 +178,88 @@ describe("ResultsGrid", () => {
 
     await waitFor(() => {
       expect(screen.getByLabelText("Add to watchlist")).toBeInTheDocument();
+    });
+  });
+
+  it("shows undo toast when movie is passed", async () => {
+    const user = userEvent.setup();
+    render(
+      <TestWrapper>
+        <ResultsGrid results={[mockMovie1, mockMovie2]} />
+      </TestWrapper>
+    );
+
+    const passButtons = screen.getAllByLabelText("Pass on this recommendation");
+    await user.click(passButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText("Hidden")).toBeInTheDocument();
+    });
+
+    expect(screen.getByLabelText("Undo")).toBeInTheDocument();
+  });
+
+  it("restores passed movie when undo is clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <TestWrapper>
+        <ResultsGrid results={[mockMovie1, mockMovie2]} />
+      </TestWrapper>
+    );
+
+    expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
+
+    const passButtons = screen.getAllByLabelText("Pass on this recommendation");
+    await user.click(passButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Test Movie 1")).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Hidden")).toBeInTheDocument();
+    const undoButton = screen.getByLabelText("Undo");
+    await user.click(undoButton);
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
+    });
+  });
+
+  it("shows toast when adding to watchlist", async () => {
+    const user = userEvent.setup();
+    render(
+      <TestWrapper>
+        <ResultsGrid results={[mockMovie1]} />
+      </TestWrapper>
+    );
+
+    const heartButton = screen.getByLabelText("Add to watchlist");
+    await user.click(heartButton);
+
+    await waitFor(() => {
+      expect(screen.getByText("Added to watchlist")).toBeInTheDocument();
+    });
+  });
+
+  it("shows toast when removing from watchlist", async () => {
+    const user = userEvent.setup();
+    render(
+      <TestWrapper>
+        <ResultsGrid results={[mockMovie1]} />
+      </TestWrapper>
+    );
+
+    const heartButton = screen.getByLabelText("Add to watchlist");
+    await user.click(heartButton);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Remove from watchlist")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText("Remove from watchlist"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Removed from watchlist")).toBeInTheDocument();
     });
   });
 });
@@ -184,9 +280,9 @@ describe("ResultsGrid QuotaExceeded handling", () => {
     });
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
@@ -215,9 +311,9 @@ describe("ResultsGrid QuotaExceeded handling", () => {
     });
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     const heartButton = screen.getByLabelText("Add to watchlist");
@@ -243,9 +339,9 @@ describe("ResultsGrid QuotaExceeded handling", () => {
     });
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.queryByText("Test Movie 1")).not.toBeInTheDocument();

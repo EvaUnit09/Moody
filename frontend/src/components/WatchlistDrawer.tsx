@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useWatchlist } from "../hooks/useWatchlist";
+import { useToast } from "../contexts/ToastContext";
 import { MovieCard } from "./MovieCard";
 import { exportWatchlist, exportWatchlistAsText } from "../lib/watchlist";
+import type { Movie } from "../api";
 
 interface WatchlistDrawerProps {
   isOpen: boolean;
@@ -10,6 +12,18 @@ interface WatchlistDrawerProps {
 
 export function WatchlistDrawer({ isOpen, onClose }: WatchlistDrawerProps) {
   const { watchlist, toggleMovie, isInList } = useWatchlist();
+  const { showToast } = useToast();
+
+  const handleToggleWatchlist = useCallback((movie: Movie) => {
+    const wasInList = isInList(movie.tmdb_id);
+    toggleMovie(movie);
+    
+    if (wasInList) {
+      showToast("Removed from watchlist", { duration: 2000 });
+    } else {
+      showToast("Added to watchlist", { duration: 2000 });
+    }
+  }, [toggleMovie, isInList, showToast]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -115,7 +129,7 @@ export function WatchlistDrawer({ isOpen, onClose }: WatchlistDrawerProps) {
                   key={movie.tmdb_id}
                   movie={movie}
                   isInWatchlist={isInList(movie.tmdb_id)}
-                  onToggleWatchlist={toggleMovie}
+                  onToggleWatchlist={handleToggleWatchlist}
                 />
               ))}
             </div>

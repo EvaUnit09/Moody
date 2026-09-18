@@ -4,6 +4,18 @@ import userEvent from "@testing-library/user-event";
 import type { Movie, MovieRecommendation } from "./api";
 import App from "./App";
 import { WatchlistProvider } from "./hooks/useWatchlist";
+import { ToastProvider } from "./contexts/ToastContext";
+import type { ReactNode } from "react";
+
+function TestWrapper({ children }: { children: ReactNode }) {
+  return (
+    <WatchlistProvider>
+      <ToastProvider>
+        {children}
+      </ToastProvider>
+    </WatchlistProvider>
+  );
+}
 
 const CACHED_MOVIE: Movie = {
   tmdb_id: 1,
@@ -55,9 +67,9 @@ describe("App popular carousel loading", () => {
     getPopularMock.mockReturnValue(new Promise(() => {}));
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <App />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.getByText("Cached Movie")).toBeInTheDocument();
@@ -69,9 +81,9 @@ describe("App popular carousel loading", () => {
     getPopularMock.mockReturnValue(new Promise(() => {}));
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <App />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(document.querySelector(".skeleton-block")).toBeInTheDocument();
@@ -91,9 +103,9 @@ describe("App mood chip and recovery integration", () => {
     recommendMock.mockResolvedValue([RECOMMENDED_MOVIE]);
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <App />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     await waitFor(() => {
@@ -119,9 +131,9 @@ describe("App mood chip and recovery integration", () => {
     recommendMock.mockResolvedValue([]);
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <App />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     await user.type(screen.getByRole("textbox"), "nonexistent mood");
@@ -139,9 +151,9 @@ describe("App mood chip and recovery integration", () => {
     recommendMock.mockRejectedValue(new Error("Network error"));
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <App />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     await user.type(screen.getByRole("textbox"), "test query");
@@ -161,9 +173,9 @@ describe("App mood chip and recovery integration", () => {
       .mockResolvedValueOnce([RECOMMENDED_MOVIE]);
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <App />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     await user.type(screen.getByRole("textbox"), "bad query");
