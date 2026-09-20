@@ -216,86 +216,64 @@ describe("ResultsGrid", () => {
     });
   });
 
-  it("shows undo toast when movie is passed", async () => {
+  it("calls onMoreLikeThis with title and current query when button clicked", async () => {
     const user = userEvent.setup();
+    const onMoreLikeThis = vi.fn();
     render(
-      <TestWrapper>
-        <ResultsGrid results={[mockMovie1, mockMovie2]} />
-      </TestWrapper>
+      <WatchlistProvider>
+        <ResultsGrid 
+          results={[mockMovie1, mockMovie2]} 
+          currentQuery="dark and moody films"
+          onMoreLikeThis={onMoreLikeThis}
+        />
+      </WatchlistProvider>
     );
 
-    const passButtons = screen.getAllByLabelText("Pass on this recommendation");
-    await user.click(passButtons[0]);
+    const moreLikeThisButtons = screen.getAllByRole("button", { name: "Find more like this" });
+    await user.click(moreLikeThisButtons[0]);
 
-    await waitFor(() => {
-      expect(screen.getByText("Hidden")).toBeInTheDocument();
-    });
-
-    expect(screen.getByLabelText("Undo")).toBeInTheDocument();
+    expect(onMoreLikeThis).toHaveBeenCalledTimes(1);
+    expect(onMoreLikeThis).toHaveBeenCalledWith("Test Movie 1", "dark and moody films");
   });
 
-  it("restores passed movie when undo is clicked", async () => {
-    const user = userEvent.setup();
+  it("renders 'More like this' button when onMoreLikeThis provided", () => {
+    const onMoreLikeThis = vi.fn();
     render(
-      <TestWrapper>
-        <ResultsGrid results={[mockMovie1, mockMovie2]} />
-      </TestWrapper>
+      <WatchlistProvider>
+        <ResultsGrid 
+          results={[mockMovie1]} 
+          currentQuery="test query"
+          onMoreLikeThis={onMoreLikeThis}
+        />
+      </WatchlistProvider>
     );
 
-    expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
-
-    const passButtons = screen.getAllByLabelText("Pass on this recommendation");
-    await user.click(passButtons[0]);
-
-    await waitFor(() => {
-      expect(screen.queryByText("Test Movie 1")).not.toBeInTheDocument();
-    });
-
-    expect(screen.getByText("Hidden")).toBeInTheDocument();
-    const undoButton = screen.getByLabelText("Undo");
-    await user.click(undoButton);
-
-    await waitFor(() => {
-      expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
-    });
+    expect(screen.getByRole("button", { name: "Find more like this" })).toBeInTheDocument();
   });
 
-  it("shows toast when adding to watchlist", async () => {
-    const user = userEvent.setup();
+  it("does not render 'More like this' button when onMoreLikeThis not provided", () => {
     render(
-      <TestWrapper>
+      <WatchlistProvider>
         <ResultsGrid results={[mockMovie1]} />
-      </TestWrapper>
+      </WatchlistProvider>
     );
 
-    const heartButton = screen.getByLabelText("Add to watchlist");
-    await user.click(heartButton);
-
-    await waitFor(() => {
-      expect(screen.getByText("Added to watchlist")).toBeInTheDocument();
-    });
+    expect(screen.queryByRole("button", { name: "Find more like this" })).not.toBeInTheDocument();
   });
 
-  it("shows toast when removing from watchlist", async () => {
-    const user = userEvent.setup();
+  it("does not render 'More like this' button when currentQuery is empty", () => {
+    const onMoreLikeThis = vi.fn();
     render(
-      <TestWrapper>
-        <ResultsGrid results={[mockMovie1]} />
-      </TestWrapper>
+      <WatchlistProvider>
+        <ResultsGrid 
+          results={[mockMovie1]} 
+          currentQuery=""
+          onMoreLikeThis={onMoreLikeThis}
+        />
+      </WatchlistProvider>
     );
 
-    const heartButton = screen.getByLabelText("Add to watchlist");
-    await user.click(heartButton);
-
-    await waitFor(() => {
-      expect(screen.getByLabelText("Remove from watchlist")).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByLabelText("Remove from watchlist"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Removed from watchlist")).toBeInTheDocument();
-    });
+    expect(screen.queryByRole("button", { name: "Find more like this" })).not.toBeInTheDocument();
   });
 });
 

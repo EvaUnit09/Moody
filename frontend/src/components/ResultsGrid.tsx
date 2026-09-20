@@ -7,11 +7,13 @@ import { SortPills, type SortOption } from "./SortPills";
 
 interface ResultsGridProps {
   results: MovieRecommendation[];
+  currentQuery?: string;
+  onMoreLikeThis?: (title: string, currentQuery: string) => void;
 }
 
 function sortMovies(movies: MovieRecommendation[], sortOption: SortOption): MovieRecommendation[] {
   const sorted = [...movies];
-  
+
   switch (sortOption) {
     case "best-match":
       return sorted;
@@ -34,9 +36,8 @@ function sortMovies(movies: MovieRecommendation[], sortOption: SortOption): Movi
   }
 }
 
-export function ResultsGrid({ results }: ResultsGridProps) {
-  const { toggleMovie, isInList, passMovie, unpassMovie, isMoviePassed } = useWatchlist();
-  const { showToast } = useToast();
+export function ResultsGrid({ results, currentQuery = "", onMoreLikeThis }: ResultsGridProps) {
+  const { toggleMovie, isInList, passMovie, isMoviePassed } = useWatchlist();
   const [sortOption, setSortOption] = useState<SortOption>("best-match");
 
   const handlePass = useCallback((tmdbId: number) => {
@@ -82,6 +83,10 @@ export function ResultsGrid({ results }: ResultsGridProps) {
     return null;
   }
 
+  const handleMoreLikeThis = onMoreLikeThis && currentQuery
+    ? (title: string) => onMoreLikeThis(title, currentQuery)
+    : undefined;
+
   return (
     <>
       <SortPills selectedSort={sortOption} onSortChange={setSortOption} />
@@ -94,6 +99,7 @@ export function ResultsGrid({ results }: ResultsGridProps) {
             onToggleWatchlist={handleToggleWatchlist}
             onPass={handlePass}
             showPassButton={true}
+            onMoreLikeThis={handleMoreLikeThis}
           />
         ))}
       </div>
