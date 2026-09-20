@@ -220,13 +220,13 @@ describe("ResultsGrid", () => {
     const user = userEvent.setup();
     const onMoreLikeThis = vi.fn();
     render(
-      <WatchlistProvider>
-        <ResultsGrid 
-          results={[mockMovie1, mockMovie2]} 
+      <TestWrapper>
+        <ResultsGrid
+          results={[mockMovie1, mockMovie2]}
           currentQuery="dark and moody films"
           onMoreLikeThis={onMoreLikeThis}
         />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     const moreLikeThisButtons = screen.getAllByRole("button", { name: "Find more like this" });
@@ -239,13 +239,13 @@ describe("ResultsGrid", () => {
   it("renders 'More like this' button when onMoreLikeThis provided", () => {
     const onMoreLikeThis = vi.fn();
     render(
-      <WatchlistProvider>
-        <ResultsGrid 
-          results={[mockMovie1]} 
+      <TestWrapper>
+        <ResultsGrid
+          results={[mockMovie1]}
           currentQuery="test query"
           onMoreLikeThis={onMoreLikeThis}
         />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.getByRole("button", { name: "Find more like this" })).toBeInTheDocument();
@@ -253,9 +253,9 @@ describe("ResultsGrid", () => {
 
   it("does not render 'More like this' button when onMoreLikeThis not provided", () => {
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.queryByRole("button", { name: "Find more like this" })).not.toBeInTheDocument();
@@ -264,13 +264,13 @@ describe("ResultsGrid", () => {
   it("does not render 'More like this' button when currentQuery is empty", () => {
     const onMoreLikeThis = vi.fn();
     render(
-      <WatchlistProvider>
-        <ResultsGrid 
-          results={[mockMovie1]} 
+      <TestWrapper>
+        <ResultsGrid
+          results={[mockMovie1]}
           currentQuery=""
           onMoreLikeThis={onMoreLikeThis}
         />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.queryByRole("button", { name: "Find more like this" })).not.toBeInTheDocument();

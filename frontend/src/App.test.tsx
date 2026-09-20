@@ -231,9 +231,9 @@ describe("More like this functionality", () => {
       .mockResolvedValueOnce([secondMovie]);
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <App />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     const searchInput = screen.getByRole("textbox");
@@ -268,9 +268,9 @@ describe("More like this functionality", () => {
     recommendMock.mockResolvedValue([RECOMMENDED_MOVIE]);
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <App />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     const searchInput = screen.getByRole("textbox");

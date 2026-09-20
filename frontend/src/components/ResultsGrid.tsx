@@ -37,7 +37,8 @@ function sortMovies(movies: MovieRecommendation[], sortOption: SortOption): Movi
 }
 
 export function ResultsGrid({ results, currentQuery = "", onMoreLikeThis }: ResultsGridProps) {
-  const { toggleMovie, isInList, passMovie, isMoviePassed } = useWatchlist();
+  const { toggleMovie, isInList, passMovie, unpassMovie, isMoviePassed } = useWatchlist();
+  const { showToast } = useToast();
   const [sortOption, setSortOption] = useState<SortOption>("best-match");
 
   const handlePass = useCallback((tmdbId: number) => {
