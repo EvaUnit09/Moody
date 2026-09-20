@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
-import type { MovieRecommendation } from "../api";
+import { useCallback, useMemo, useState } from "react";
+import type { Movie, MovieRecommendation } from "../api";
 import { MovieCard } from "./MovieCard";
 import { useWatchlist } from "../hooks/useWatchlist";
+import { useToast } from "../contexts/ToastContext";
 import { SortPills, type SortOption } from "./SortPills";
 
 interface ResultsGridProps {
@@ -36,8 +37,42 @@ function sortMovies(movies: MovieRecommendation[], sortOption: SortOption): Movi
 }
 
 export function ResultsGrid({ results, currentQuery = "", onMoreLikeThis }: ResultsGridProps) {
-  const { toggleMovie, isInList, passMovie, isMoviePassed } = useWatchlist();
+  const { toggleMovie, isInList, passMovie, unpassMovie, isMoviePassed } = useWatchlist();
+  const { showToast } = useToast();
   const [sortOption, setSortOption] = useState<SortOption>("best-match");
+
+  const handlePass = useCallback((tmdbId: number) => {
+    const success = passMovie(tmdbId);
+    if (!success) {
+      showToast("Couldn't save — storage full", { duration: 3000 });
+      return;
+    }
+    showToast("Hidden", {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          unpassMovie(tmdbId);
+        },
+      },
+      duration: 6000,
+    });
+  }, [passMovie, unpassMovie, showToast]);
+
+  const handleToggleWatchlist = useCallback((movie: Movie) => {
+    const wasInList = isInList(movie.tmdb_id);
+    const success = toggleMovie(movie);
+
+    if (!success) {
+      showToast("Couldn't save — storage full", { duration: 3000 });
+      return;
+    }
+
+    if (wasInList) {
+      showToast("Removed from watchlist", { duration: 2000 });
+    } else {
+      showToast("Added to watchlist", { duration: 2000 });
+    }
+  }, [toggleMovie, isInList, showToast]);
 
   const sortedResults = useMemo(() => {
     return sortMovies(results, sortOption);
@@ -62,8 +97,8 @@ export function ResultsGrid({ results, currentQuery = "", onMoreLikeThis }: Resu
             key={movie.tmdb_id}
             movie={movie}
             isInWatchlist={isInList(movie.tmdb_id)}
-            onToggleWatchlist={toggleMovie}
-            onPass={passMovie}
+            onToggleWatchlist={handleToggleWatchlist}
+            onPass={handlePass}
             showPassButton={true}
             onMoreLikeThis={handleMoreLikeThis}
           />

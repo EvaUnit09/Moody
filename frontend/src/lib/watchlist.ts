@@ -53,24 +53,23 @@ export function getWatchlist(): WatchlistItem[] {
   }
 }
 
-export function addToWatchlist(movie: Movie): void {
+export function addToWatchlist(movie: Movie): boolean {
   if (!isValidMovie(movie)) {
     console.error("Invalid movie data, not adding to watchlist");
-    return;
+    return false;
   }
   const watchlist = getWatchlist();
   const exists = watchlist.some((item) => item.tmdb_id === movie.tmdb_id);
-  if (!exists) {
-    const item: WatchlistItem = { ...movie, addedAt: Date.now() };
-    watchlist.unshift(item);
-    safeSetItem(WATCHLIST_KEY, JSON.stringify(watchlist));
-  }
+  if (exists) return true;
+  const item: WatchlistItem = { ...movie, addedAt: Date.now() };
+  watchlist.unshift(item);
+  return safeSetItem(WATCHLIST_KEY, JSON.stringify(watchlist));
 }
 
-export function removeFromWatchlist(tmdbId: number): void {
+export function removeFromWatchlist(tmdbId: number): boolean {
   const watchlist = getWatchlist();
   const filtered = watchlist.filter((item) => item.tmdb_id !== tmdbId);
-  safeSetItem(WATCHLIST_KEY, JSON.stringify(filtered));
+  return safeSetItem(WATCHLIST_KEY, JSON.stringify(filtered));
 }
 
 export function isInWatchlist(tmdbId: number): boolean {
@@ -90,16 +89,16 @@ export function getPassedMovies(): Set<number> {
   }
 }
 
-export function addToPassedMovies(tmdbId: number): void {
+export function addToPassedMovies(tmdbId: number): boolean {
   const passed = getPassedMovies();
   passed.add(tmdbId);
-  safeSetItem(PASSED_KEY, JSON.stringify([...passed]));
+  return safeSetItem(PASSED_KEY, JSON.stringify([...passed]));
 }
 
-export function removeFromPassedMovies(tmdbId: number): void {
+export function removeFromPassedMovies(tmdbId: number): boolean {
   const passed = getPassedMovies();
   passed.delete(tmdbId);
-  safeSetItem(PASSED_KEY, JSON.stringify([...passed]));
+  return safeSetItem(PASSED_KEY, JSON.stringify([...passed]));
 }
 
 export function isMoviePassed(tmdbId: number): boolean {

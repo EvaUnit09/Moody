@@ -11,16 +11,22 @@ import {
   type WatchlistItem,
 } from "../lib/watchlist";
 
+interface PassedMovieRecord {
+  tmdbId: number;
+  timestamp: number;
+}
+
 interface WatchlistContextValue {
   watchlist: WatchlistItem[];
   passedMovies: Set<number>;
-  addMovie: (movie: Movie) => void;
-  removeMovie: (tmdbId: number) => void;
-  toggleMovie: (movie: Movie) => void;
+  addMovie: (movie: Movie) => boolean;
+  removeMovie: (tmdbId: number) => boolean;
+  toggleMovie: (movie: Movie) => boolean;
   isInList: (tmdbId: number) => boolean;
-  passMovie: (tmdbId: number) => void;
-  unpassMovie: (tmdbId: number) => void;
+  passMovie: (tmdbId: number) => boolean;
+  unpassMovie: (tmdbId: number) => boolean;
   isMoviePassed: (tmdbId: number) => boolean;
+  lastPassedMovie: PassedMovieRecord | null;
 }
 
 const WatchlistContext = createContext<WatchlistContextValue | null>(null);
@@ -28,6 +34,7 @@ const WatchlistContext = createContext<WatchlistContextValue | null>(null);
 export function WatchlistProvider({ children }: { children: ReactNode }) {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(() => getWatchlist());
   const [passedMovies, setPassedMovies] = useState<Set<number>>(() => getPassedMovies());
+  const [lastPassedMovie, setLastPassedMovie] = useState<PassedMovieRecord | null>(null);
 
   const refresh = useCallback(() => {
     setWatchlist(getWatchlist());
@@ -45,21 +52,22 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const addMovie = useCallback((movie: Movie) => {
-    addToStorage(movie);
+    const success = addToStorage(movie);
     refresh();
+    return success;
   }, [refresh]);
 
   const removeMovie = useCallback((tmdbId: number) => {
-    removeFromStorage(tmdbId);
+    const success = removeFromStorage(tmdbId);
     refresh();
+    return success;
   }, [refresh]);
 
   const toggleMovie = useCallback((movie: Movie) => {
     if (isInWatchlist(movie.tmdb_id)) {
-      removeMovie(movie.tmdb_id);
-    } else {
-      addMovie(movie);
+      return removeMovie(movie.tmdb_id);
     }
+    return addMovie(movie);
   }, [addMovie, removeMovie]);
 
   const isInList = useCallback((tmdbId: number) => {
@@ -67,13 +75,21 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const passMovie = useCallback((tmdbId: number) => {
-    addToPassedStorage(tmdbId);
+    const success = addToPassedStorage(tmdbId);
+    if (success) {
+      setLastPassedMovie({ tmdbId, timestamp: Date.now() });
+    }
     refresh();
+    return success;
   }, [refresh]);
 
   const unpassMovie = useCallback((tmdbId: number) => {
-    removeFromPassedStorage(tmdbId);
+    const success = removeFromPassedStorage(tmdbId);
+    if (success) {
+      setLastPassedMovie((prev) => (prev?.tmdbId === tmdbId ? null : prev));
+    }
     refresh();
+    return success;
   }, [refresh]);
 
   const isMoviePassedFn = useCallback((tmdbId: number) => {
@@ -90,6 +106,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     passMovie,
     unpassMovie,
     isMoviePassed: isMoviePassedFn,
+    lastPassedMovie,
   };
 
   return (
