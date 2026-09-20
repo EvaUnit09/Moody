@@ -197,7 +197,37 @@ class DatadogObservability:
                 
                 if isinstance(result, list):
                     span.set_tag("llm.output_count", len(result))
-                
+
+                return result
+        return wrapper
+
+    @staticmethod
+    def trace_query_expansion(func: Callable[..., T]) -> Callable[..., T]:
+        """Decorator to trace query expansion (pre-embedding query rewrite) calls."""
+        @wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
+            if not settings.dd_trace_enabled or not DDTRACE_AVAILABLE:
+                return await func(*args, **kwargs)
+
+            query = args[0] if args else kwargs.get("query", "")
+
+            with tracer.trace(
+                "llm.query_expansion",
+                service=settings.dd_service,
+                resource="anthropic.claude-haiku-4-5",
+            ) as span:
+                span.set_tag("llm.provider", "anthropic")
+                span.set_tag("llm.model", "claude-haiku-4-5")
+                span.set_tag("llm.operation", "query_expansion")
+
+                if isinstance(query, str):
+                    span.set_tag("llm.query_length", len(query))
+
+                result = await func(*args, **kwargs)
+
+                if isinstance(result, str):
+                    span.set_tag("llm.expanded_query_length", len(result))
+
                 return result
         return wrapper
 

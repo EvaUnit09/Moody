@@ -8,6 +8,7 @@ from app import cache
 from app.db import search_similar
 from app.models import RecommendRequest, RecommendResponse, WatchProvider
 from app.services.embeddings import embed_text
+from app.services.query_intent import expand_query
 from app.services.rerank import rerank
 from app.services.tmdb import WatchProviderService
 
@@ -47,7 +48,7 @@ def get_rate_limit_key(request: Request) -> str:
 # is multiplied (N replicas ≈ N×10/min). See get_rate_limit_key docstring.
 limiter = Limiter(key_func=get_rate_limit_key)
 
-CANDIDATE_LIMIT = 25
+CANDIDATE_LIMIT = 40
 
 
 async def _enrich_with_providers(
@@ -94,7 +95,8 @@ async def recommend(body: RecommendRequest, request: Request) -> RecommendRespon
 
     logger.debug(f"Cache miss for query={query!r}")
     
-    embedding = await embed_text(query)
+    search_query = await expand_query(query)
+    embedding = await embed_text(search_query)
     candidates = await search_similar(embedding, limit=CANDIDATE_LIMIT)
     results = await rerank(query, candidates)
     

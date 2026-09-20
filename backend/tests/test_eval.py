@@ -76,9 +76,9 @@ class TestEvaluationHarness:
     """Test EvaluationHarness static methods."""
 
     def test_get_test_queries(self):
-        """get_test_queries should return 8 curated queries."""
+        """get_test_queries should return 9 curated queries."""
         queries = EvaluationHarness.get_test_queries()
-        assert len(queries) == 8
+        assert len(queries) == 9
         assert all(isinstance(q, EvalQuery) for q in queries)
         assert all(len(q.expected_genres) > 0 for q in queries)
         assert all(q.min_results >= 3 for q in queries)
@@ -116,19 +116,21 @@ class TestEvaluationHarness:
             },
         ]
 
-        with patch('app.services.eval.embed_text', new_callable=AsyncMock) as mock_embed:
-            with patch('app.services.eval.search_similar', new_callable=AsyncMock) as mock_search:
-                with patch('app.services.eval.rerank', new_callable=AsyncMock) as mock_rerank:
-                    mock_embed.return_value = [0.1] * 1536
-                    mock_search.return_value = mock_results
-                    mock_rerank.return_value = mock_results
+        with patch('app.services.eval.expand_query', new_callable=AsyncMock) as mock_expand:
+            with patch('app.services.eval.embed_text', new_callable=AsyncMock) as mock_embed:
+                with patch('app.services.eval.search_similar', new_callable=AsyncMock) as mock_search:
+                    with patch('app.services.eval.rerank', new_callable=AsyncMock) as mock_rerank:
+                        mock_expand.side_effect = lambda q: q
+                        mock_embed.return_value = [0.1] * 1536
+                        mock_search.return_value = mock_results
+                        mock_rerank.return_value = mock_results
 
-                    result = await EvaluationHarness.evaluate_query(eval_query)
+                        result = await EvaluationHarness.evaluate_query(eval_query)
 
-                    # Should match "Comedy" from expected genres
-                    assert result.expected_genres_matched == 1
-                    assert "Comedy" in result.genres_found
-                    assert result.results_count == 2
+                        # Should match "Comedy" from expected genres
+                        assert result.expected_genres_matched == 1
+                        assert "Comedy" in result.genres_found
+                        assert result.results_count == 2
 
     @pytest.mark.asyncio
     async def test_evaluate_query_reason_quality(self):
@@ -151,17 +153,19 @@ class TestEvaluationHarness:
             },
         ]
 
-        with patch('app.services.eval.embed_text', new_callable=AsyncMock) as mock_embed:
-            with patch('app.services.eval.search_similar', new_callable=AsyncMock) as mock_search:
-                with patch('app.services.eval.rerank', new_callable=AsyncMock) as mock_rerank:
-                    mock_embed.return_value = [0.1] * 1536
-                    mock_search.return_value = mock_results
-                    mock_rerank.return_value = mock_results
+        with patch('app.services.eval.expand_query', new_callable=AsyncMock) as mock_expand:
+            with patch('app.services.eval.embed_text', new_callable=AsyncMock) as mock_embed:
+                with patch('app.services.eval.search_similar', new_callable=AsyncMock) as mock_search:
+                    with patch('app.services.eval.rerank', new_callable=AsyncMock) as mock_rerank:
+                        mock_expand.side_effect = lambda q: q
+                        mock_embed.return_value = [0.1] * 1536
+                        mock_search.return_value = mock_results
+                        mock_rerank.return_value = mock_results
 
-                    result = await EvaluationHarness.evaluate_query(eval_query)
+                        result = await EvaluationHarness.evaluate_query(eval_query)
 
-                    assert result.avg_reason_length >= 30
-                    assert result.passed is True
+                        assert result.avg_reason_length >= 30
+                        assert result.passed is True
 
     @pytest.mark.asyncio
     async def test_evaluate_query_short_reasons_fail(self):
@@ -184,18 +188,20 @@ class TestEvaluationHarness:
             },
         ]
 
-        with patch('app.services.eval.embed_text', new_callable=AsyncMock) as mock_embed:
-            with patch('app.services.eval.search_similar', new_callable=AsyncMock) as mock_search:
-                with patch('app.services.eval.rerank', new_callable=AsyncMock) as mock_rerank:
-                    mock_embed.return_value = [0.1] * 1536
-                    mock_search.return_value = mock_results
-                    mock_rerank.return_value = mock_results
+        with patch('app.services.eval.expand_query', new_callable=AsyncMock) as mock_expand:
+            with patch('app.services.eval.embed_text', new_callable=AsyncMock) as mock_embed:
+                with patch('app.services.eval.search_similar', new_callable=AsyncMock) as mock_search:
+                    with patch('app.services.eval.rerank', new_callable=AsyncMock) as mock_rerank:
+                        mock_expand.side_effect = lambda q: q
+                        mock_embed.return_value = [0.1] * 1536
+                        mock_search.return_value = mock_results
+                        mock_rerank.return_value = mock_results
 
-                    result = await EvaluationHarness.evaluate_query(eval_query)
+                        result = await EvaluationHarness.evaluate_query(eval_query)
 
-                    assert result.avg_reason_length < 30
-                    assert result.passed is False
-                    assert "too short" in result.notes
+                        assert result.avg_reason_length < 30
+                        assert result.passed is False
+                        assert "too short" in result.notes
 
     @pytest.mark.asyncio
     async def test_evaluate_query_no_expected_genre_match_fails(self):
@@ -218,18 +224,20 @@ class TestEvaluationHarness:
             },
         ]
 
-        with patch('app.services.eval.embed_text', new_callable=AsyncMock) as mock_embed:
-            with patch('app.services.eval.search_similar', new_callable=AsyncMock) as mock_search:
-                with patch('app.services.eval.rerank', new_callable=AsyncMock) as mock_rerank:
-                    mock_embed.return_value = [0.1] * 1536
-                    mock_search.return_value = mock_results
-                    mock_rerank.return_value = mock_results
+        with patch('app.services.eval.expand_query', new_callable=AsyncMock) as mock_expand:
+            with patch('app.services.eval.embed_text', new_callable=AsyncMock) as mock_embed:
+                with patch('app.services.eval.search_similar', new_callable=AsyncMock) as mock_search:
+                    with patch('app.services.eval.rerank', new_callable=AsyncMock) as mock_rerank:
+                        mock_expand.side_effect = lambda q: q
+                        mock_embed.return_value = [0.1] * 1536
+                        mock_search.return_value = mock_results
+                        mock_rerank.return_value = mock_results
 
-                    result = await EvaluationHarness.evaluate_query(eval_query)
+                        result = await EvaluationHarness.evaluate_query(eval_query)
 
-                    assert result.expected_genres_matched == 0
-                    assert result.passed is False
-                    assert "expected genres matched" in result.notes.lower()
+                        assert result.expected_genres_matched == 0
+                        assert result.passed is False
+                        assert "expected genres matched" in result.notes.lower()
 
     @pytest.mark.asyncio
     async def test_evaluate_query_all_criteria(self):
@@ -259,19 +267,21 @@ class TestEvaluationHarness:
             },
         ]
 
-        with patch('app.services.eval.embed_text', new_callable=AsyncMock) as mock_embed:
-            with patch('app.services.eval.search_similar', new_callable=AsyncMock) as mock_search:
-                with patch('app.services.eval.rerank', new_callable=AsyncMock) as mock_rerank:
-                    mock_embed.return_value = [0.1] * 1536
-                    mock_search.return_value = mock_results
-                    mock_rerank.return_value = mock_results
+        with patch('app.services.eval.expand_query', new_callable=AsyncMock) as mock_expand:
+            with patch('app.services.eval.embed_text', new_callable=AsyncMock) as mock_embed:
+                with patch('app.services.eval.search_similar', new_callable=AsyncMock) as mock_search:
+                    with patch('app.services.eval.rerank', new_callable=AsyncMock) as mock_rerank:
+                        mock_expand.side_effect = lambda q: q
+                        mock_embed.return_value = [0.1] * 1536
+                        mock_search.return_value = mock_results
+                        mock_rerank.return_value = mock_results
 
-                    result = await EvaluationHarness.evaluate_query(eval_query)
+                        result = await EvaluationHarness.evaluate_query(eval_query)
 
-                    # All criteria should pass
-                    assert result.results_count >= 2
-                    assert result.expected_genres_matched > 0
-                    assert result.avg_vote_average >= 6.0
-                    assert result.avg_reason_length >= 25
-                    assert result.passed is True
-                    assert result.notes == "All checks passed"
+                        # All criteria should pass
+                        assert result.results_count >= 2
+                        assert result.expected_genres_matched > 0
+                        assert result.avg_vote_average >= 6.0
+                        assert result.avg_reason_length >= 25
+                        assert result.passed is True
+                        assert result.notes == "All checks passed"
