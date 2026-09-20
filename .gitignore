@@ -16,3 +16,7 @@ backend/data/*.json
 .DS_Store
 test-providers.html
 artifacts/
+
+# Claude Code local state
+.claude/settings.local.json
+.claude/reviews/
