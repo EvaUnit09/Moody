@@ -3,7 +3,19 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ResultsGrid } from "./ResultsGrid";
 import { WatchlistProvider } from "../hooks/useWatchlist";
+import { ToastProvider } from "../contexts/ToastContext";
 import type { MovieRecommendation } from "../api";
+import type { ReactNode } from "react";
+
+function TestWrapper({ children }: { children: ReactNode }) {
+  return (
+    <WatchlistProvider>
+      <ToastProvider>
+        {children}
+      </ToastProvider>
+    </WatchlistProvider>
+  );
+}
 
 const mockMovie1: MovieRecommendation = {
   tmdb_id: 123,
@@ -67,9 +79,9 @@ describe("ResultsGrid", () => {
 
   it("renders all movies initially", () => {
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
@@ -79,9 +91,9 @@ describe("ResultsGrid", () => {
 
   it("renders sort pills", () => {
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.getByText("Best match")).toBeInTheDocument();
@@ -92,9 +104,9 @@ describe("ResultsGrid", () => {
 
   it("returns null when no results", () => {
     const { container } = render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(container.firstChild).toBeNull();
@@ -103,9 +115,9 @@ describe("ResultsGrid", () => {
   it("immediately hides passed movie from grid", async () => {
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
@@ -125,9 +137,9 @@ describe("ResultsGrid", () => {
   it("hides multiple passed movies", async () => {
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     const passButtons = screen.getAllByLabelText("Pass on this recommendation");
@@ -150,10 +162,10 @@ describe("ResultsGrid", () => {
 
   it("returns null when all movies are passed", async () => {
     const user = userEvent.setup();
-    const { container } = render(
-      <WatchlistProvider>
+    render(
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
@@ -162,17 +174,19 @@ describe("ResultsGrid", () => {
     await user.click(passButton);
 
     await waitFor(() => {
-      expect(container.firstChild).toBeNull();
+      expect(screen.queryByText("Test Movie 1")).not.toBeInTheDocument();
     });
+
+    expect(document.querySelector(".results-grid")).not.toBeInTheDocument();
   });
 
   it("filters already-passed movies on mount", () => {
     localStorage.setItem("moody-passed", JSON.stringify([123, 456]));
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.queryByText("Test Movie 1")).not.toBeInTheDocument();
@@ -183,9 +197,9 @@ describe("ResultsGrid", () => {
   it("toggles watchlist state correctly", async () => {
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     const heartButton = screen.getByLabelText("Add to watchlist");
@@ -206,13 +220,13 @@ describe("ResultsGrid", () => {
     const user = userEvent.setup();
     const onMoreLikeThis = vi.fn();
     render(
-      <WatchlistProvider>
-        <ResultsGrid 
-          results={[mockMovie1, mockMovie2]} 
+      <TestWrapper>
+        <ResultsGrid
+          results={[mockMovie1, mockMovie2]}
           currentQuery="dark and moody films"
           onMoreLikeThis={onMoreLikeThis}
         />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     const moreLikeThisButtons = screen.getAllByRole("button", { name: "Find more like this" });
@@ -225,13 +239,13 @@ describe("ResultsGrid", () => {
   it("renders 'More like this' button when onMoreLikeThis provided", () => {
     const onMoreLikeThis = vi.fn();
     render(
-      <WatchlistProvider>
-        <ResultsGrid 
-          results={[mockMovie1]} 
+      <TestWrapper>
+        <ResultsGrid
+          results={[mockMovie1]}
           currentQuery="test query"
           onMoreLikeThis={onMoreLikeThis}
         />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.getByRole("button", { name: "Find more like this" })).toBeInTheDocument();
@@ -239,9 +253,9 @@ describe("ResultsGrid", () => {
 
   it("does not render 'More like this' button when onMoreLikeThis not provided", () => {
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.queryByRole("button", { name: "Find more like this" })).not.toBeInTheDocument();
@@ -250,13 +264,13 @@ describe("ResultsGrid", () => {
   it("does not render 'More like this' button when currentQuery is empty", () => {
     const onMoreLikeThis = vi.fn();
     render(
-      <WatchlistProvider>
-        <ResultsGrid 
-          results={[mockMovie1]} 
+      <TestWrapper>
+        <ResultsGrid
+          results={[mockMovie1]}
           currentQuery=""
           onMoreLikeThis={onMoreLikeThis}
         />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.queryByRole("button", { name: "Find more like this" })).not.toBeInTheDocument();
@@ -271,9 +285,9 @@ describe("ResultsGrid Sorting", () => {
   it("sorts by highest rated", async () => {
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     await user.click(screen.getByText("Highest rated"));
@@ -287,9 +301,9 @@ describe("ResultsGrid Sorting", () => {
   it("sorts by newest year", async () => {
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3, mockMovie5]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     await user.click(screen.getByText("Newest"));
@@ -304,9 +318,9 @@ describe("ResultsGrid Sorting", () => {
   it("sorts by title A-Z", async () => {
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie4, mockMovie5]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     await user.click(screen.getByText("Title A–Z"));
@@ -320,9 +334,9 @@ describe("ResultsGrid Sorting", () => {
   it("restores original API order when selecting best match", async () => {
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     await user.click(screen.getByText("Highest rated"));
@@ -346,9 +360,9 @@ describe("ResultsGrid Sorting", () => {
 
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, movieWithNullRating, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     await user.click(screen.getByText("Highest rated"));
@@ -369,9 +383,9 @@ describe("ResultsGrid Sorting", () => {
 
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, movieWithNullYear, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     await user.click(screen.getByText("Newest"));
@@ -385,9 +399,9 @@ describe("ResultsGrid Sorting", () => {
   it("maintains sort when passing movies", async () => {
     const user = userEvent.setup();
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2, mockMovie3]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     await user.click(screen.getByText("Highest rated"));
@@ -424,9 +438,9 @@ describe("ResultsGrid QuotaExceeded handling", () => {
     });
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
@@ -439,6 +453,8 @@ describe("ResultsGrid QuotaExceeded handling", () => {
     );
 
     expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
+    expect(screen.queryByText("Hidden")).not.toBeInTheDocument();
+    expect(screen.getByText("Couldn't save — storage full")).toBeInTheDocument();
 
     setItemSpy.mockRestore();
     consoleWarnSpy.mockRestore();
@@ -455,9 +471,9 @@ describe("ResultsGrid QuotaExceeded handling", () => {
     });
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     const heartButton = screen.getByLabelText("Add to watchlist");
@@ -468,6 +484,8 @@ describe("ResultsGrid QuotaExceeded handling", () => {
     );
 
     expect(screen.getByLabelText("Add to watchlist")).toBeInTheDocument();
+    expect(screen.queryByText("Added to watchlist")).not.toBeInTheDocument();
+    expect(screen.getByText("Couldn't save — storage full")).toBeInTheDocument();
 
     setItemSpy.mockRestore();
     consoleWarnSpy.mockRestore();
@@ -483,9 +501,9 @@ describe("ResultsGrid QuotaExceeded handling", () => {
     });
 
     render(
-      <WatchlistProvider>
+      <TestWrapper>
         <ResultsGrid results={[mockMovie1, mockMovie2]} />
-      </WatchlistProvider>
+      </TestWrapper>
     );
 
     expect(screen.queryByText("Test Movie 1")).not.toBeInTheDocument();
