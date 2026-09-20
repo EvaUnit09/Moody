@@ -29,6 +29,12 @@ describe("MovieCard", () => {
     expect(screen.getByText("8.4")).toBeInTheDocument();
   });
 
+  test("does not render an actions wrapper when no action handlers are provided", () => {
+    const { container } = render(<MovieCard movie={MOCK_MOVIE} />);
+
+    expect(container.querySelector(".movie-card-actions")).not.toBeInTheDocument();
+  });
+
   test("renders poster image when poster_path available", () => {
     render(<MovieCard movie={MOCK_MOVIE} />);
 
