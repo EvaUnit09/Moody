@@ -106,6 +106,11 @@ function App() {
     }
   }
 
+  function handleMoreLikeThis(title: string, currentQuery: string) {
+    const newQuery = `movies like ${title}, same vibe as "${currentQuery}"`;
+    handleSearch(newQuery);
+  }
+
   return (
     <div className="app-bg">
       <header className="nav app-header">
@@ -175,7 +180,13 @@ function App() {
             <RecoveryPrompt onMoodSelect={handleSearch} />
           )}
 
-          {!isLoading && !error && <ResultsGrid results={results} />}
+          {!isLoading && !error && (
+            <ResultsGrid 
+              results={results} 
+              currentQuery={query}
+              onMoreLikeThis={handleMoreLikeThis}
+            />
+          )}
         </section>
       )}
 

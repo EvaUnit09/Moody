@@ -6,11 +6,13 @@ import { SortPills, type SortOption } from "./SortPills";
 
 interface ResultsGridProps {
   results: MovieRecommendation[];
+  currentQuery?: string;
+  onMoreLikeThis?: (title: string, currentQuery: string) => void;
 }
 
 function sortMovies(movies: MovieRecommendation[], sortOption: SortOption): MovieRecommendation[] {
   const sorted = [...movies];
-  
+
   switch (sortOption) {
     case "best-match":
       return sorted;
@@ -33,7 +35,7 @@ function sortMovies(movies: MovieRecommendation[], sortOption: SortOption): Movi
   }
 }
 
-export function ResultsGrid({ results }: ResultsGridProps) {
+export function ResultsGrid({ results, currentQuery = "", onMoreLikeThis }: ResultsGridProps) {
   const { toggleMovie, isInList, passMovie, isMoviePassed } = useWatchlist();
   const [sortOption, setSortOption] = useState<SortOption>("best-match");
 
@@ -47,6 +49,10 @@ export function ResultsGrid({ results }: ResultsGridProps) {
     return null;
   }
 
+  const handleMoreLikeThis = onMoreLikeThis && currentQuery
+    ? (title: string) => onMoreLikeThis(title, currentQuery)
+    : undefined;
+
   return (
     <>
       <SortPills selectedSort={sortOption} onSortChange={setSortOption} />
@@ -59,6 +65,7 @@ export function ResultsGrid({ results }: ResultsGridProps) {
             onToggleWatchlist={toggleMovie}
             onPass={passMovie}
             showPassButton={true}
+            onMoreLikeThis={handleMoreLikeThis}
           />
         ))}
       </div>
