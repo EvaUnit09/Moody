@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 
 export interface Toast {
   id: string;
@@ -19,12 +19,30 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((timerId) => clearTimeout(timerId));
+      timers.clear();
+    };
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    const timerId = timersRef.current.get(id);
+    if (timerId !== undefined) {
+      clearTimeout(timerId);
+      timersRef.current.delete(id);
+    }
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   const showToast = useCallback(
     (message: string, options?: { action?: Toast["action"]; duration?: number }) => {
       const id = `toast-${Date.now()}-${Math.random()}`;
       const duration = options?.duration ?? 3000;
-      
+
       const toast: Toast = {
         id,
         message,
@@ -35,17 +53,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       setToasts((prev) => [...prev, toast]);
 
       if (duration > 0) {
-        setTimeout(() => {
+        const timerId = setTimeout(() => {
+          timersRef.current.delete(id);
           setToasts((prev) => prev.filter((t) => t.id !== id));
         }, duration);
+        timersRef.current.set(id, timerId);
       }
     },
     []
   );
-
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
 
   const value: ToastContextValue = {
     showToast,
@@ -74,12 +90,40 @@ interface ToastContainerProps {
 }
 
 function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
+  const dismissHandlersRef = useRef<Map<string, () => void>>(new Map());
+
+  const registerDismiss = useCallback((id: string, dismiss: () => void) => {
+    dismissHandlersRef.current.set(id, dismiss);
+    return () => {
+      dismissHandlersRef.current.delete(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (toasts.length === 0) return;
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        const mostRecent = toasts[toasts.length - 1];
+        const dismiss = dismissHandlersRef.current.get(mostRecent.id);
+        if (dismiss) {
+          dismiss();
+        } else {
+          onDismiss(mostRecent.id);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [toasts, onDismiss]);
+
   if (toasts.length === 0) return null;
 
   return (
     <div className="toast-container" role="region" aria-live="polite" aria-label="Notifications">
       {toasts.map((toast) => (
-        <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
+        <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} registerDismiss={registerDismiss} />
       ))}
     </div>
   );
@@ -88,33 +132,36 @@ function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
 interface ToastItemProps {
   toast: Toast;
   onDismiss: (id: string) => void;
+  registerDismiss: (id: string, dismiss: () => void) => () => void;
 }
 
-function ToastItem({ toast, onDismiss }: ToastItemProps) {
+function ToastItem({ toast, onDismiss, registerDismiss }: ToastItemProps) {
   const [isExiting, setIsExiting] = useState(false);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const handleDismiss = useCallback(() => {
     setIsExiting(true);
-    setTimeout(() => {
+    exitTimerRef.current = setTimeout(() => {
       onDismiss(toast.id);
     }, 200);
   }, [toast.id, onDismiss]);
+
+  useEffect(() => {
+    return registerDismiss(toast.id, handleDismiss);
+  }, [toast.id, registerDismiss, handleDismiss]);
+
+  useEffect(() => {
+    return () => {
+      if (exitTimerRef.current !== undefined) {
+        clearTimeout(exitTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleAction = useCallback(() => {
     toast.action?.onClick();
     handleDismiss();
   }, [toast.action, handleDismiss]);
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        handleDismiss();
-      }
-    };
-
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [handleDismiss]);
 
   return (
     <div className={`toast ${isExiting ? "toast-exit" : ""}`} role="status">

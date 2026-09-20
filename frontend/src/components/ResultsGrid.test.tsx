@@ -475,6 +475,8 @@ describe("ResultsGrid QuotaExceeded handling", () => {
     );
 
     expect(screen.getByText("Test Movie 1")).toBeInTheDocument();
+    expect(screen.queryByText("Hidden")).not.toBeInTheDocument();
+    expect(screen.getByText("Couldn't save — storage full")).toBeInTheDocument();
 
     setItemSpy.mockRestore();
     consoleWarnSpy.mockRestore();
@@ -504,6 +506,8 @@ describe("ResultsGrid QuotaExceeded handling", () => {
     );
 
     expect(screen.getByLabelText("Add to watchlist")).toBeInTheDocument();
+    expect(screen.queryByText("Added to watchlist")).not.toBeInTheDocument();
+    expect(screen.getByText("Couldn't save — storage full")).toBeInTheDocument();
 
     setItemSpy.mockRestore();
     consoleWarnSpy.mockRestore();

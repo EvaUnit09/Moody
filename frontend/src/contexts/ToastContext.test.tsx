@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider, useToast } from "./ToastContext";
 
@@ -160,6 +160,65 @@ describe("ToastContext", () => {
 
     const toasts = screen.getAllByRole("status");
     expect(toasts).toHaveLength(2);
+  });
+
+  it("Escape dismisses only the most recently shown toast, not all of them", async () => {
+    const user = userEvent.setup();
+
+    function MultiToastComponent() {
+      const { showToast } = useToast();
+
+      return (
+        <div>
+          <button onClick={() => showToast("First", { duration: 5000 })}>
+            First
+          </button>
+          <button onClick={() => showToast("Second", { duration: 5000 })}>
+            Second
+          </button>
+        </div>
+      );
+    }
+
+    render(
+      <ToastProvider>
+        <MultiToastComponent />
+      </ToastProvider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "First" }));
+    await user.click(screen.getByRole("button", { name: "Second" }));
+
+    expect(screen.getAllByRole("status")).toHaveLength(2);
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("status")).toHaveLength(1);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("First");
+  });
+
+  it("cancels pending timers on unmount without warnings", async () => {
+    const user = userEvent.setup();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { unmount } = render(
+      <ToastProvider>
+        <TestComponent />
+      </ToastProvider>
+    );
+
+    await user.click(screen.getByText("Show Toast"));
+    expect(screen.getByText("Test message")).toBeInTheDocument();
+
+    unmount();
+
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+    cleanup();
   });
 
   it("has accessible ARIA attributes", async () => {

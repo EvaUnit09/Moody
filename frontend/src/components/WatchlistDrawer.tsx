@@ -16,8 +16,13 @@ export function WatchlistDrawer({ isOpen, onClose }: WatchlistDrawerProps) {
 
   const handleToggleWatchlist = useCallback((movie: Movie) => {
     const wasInList = isInList(movie.tmdb_id);
-    toggleMovie(movie);
-    
+    const success = toggleMovie(movie);
+
+    if (!success) {
+      showToast("Couldn't save — storage full", { duration: 3000 });
+      return;
+    }
+
     if (wasInList) {
       showToast("Removed from watchlist", { duration: 2000 });
     } else {

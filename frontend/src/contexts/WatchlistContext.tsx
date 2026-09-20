@@ -19,12 +19,12 @@ interface PassedMovieRecord {
 interface WatchlistContextValue {
   watchlist: WatchlistItem[];
   passedMovies: Set<number>;
-  addMovie: (movie: Movie) => void;
-  removeMovie: (tmdbId: number) => void;
-  toggleMovie: (movie: Movie) => void;
+  addMovie: (movie: Movie) => boolean;
+  removeMovie: (tmdbId: number) => boolean;
+  toggleMovie: (movie: Movie) => boolean;
   isInList: (tmdbId: number) => boolean;
-  passMovie: (tmdbId: number) => void;
-  unpassMovie: (tmdbId: number) => void;
+  passMovie: (tmdbId: number) => boolean;
+  unpassMovie: (tmdbId: number) => boolean;
   isMoviePassed: (tmdbId: number) => boolean;
   lastPassedMovie: PassedMovieRecord | null;
 }
@@ -52,21 +52,22 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const addMovie = useCallback((movie: Movie) => {
-    addToStorage(movie);
+    const success = addToStorage(movie);
     refresh();
+    return success;
   }, [refresh]);
 
   const removeMovie = useCallback((tmdbId: number) => {
-    removeFromStorage(tmdbId);
+    const success = removeFromStorage(tmdbId);
     refresh();
+    return success;
   }, [refresh]);
 
   const toggleMovie = useCallback((movie: Movie) => {
     if (isInWatchlist(movie.tmdb_id)) {
-      removeMovie(movie.tmdb_id);
-    } else {
-      addMovie(movie);
+      return removeMovie(movie.tmdb_id);
     }
+    return addMovie(movie);
   }, [addMovie, removeMovie]);
 
   const isInList = useCallback((tmdbId: number) => {
@@ -74,15 +75,21 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const passMovie = useCallback((tmdbId: number) => {
-    addToPassedStorage(tmdbId);
-    setLastPassedMovie({ tmdbId, timestamp: Date.now() });
+    const success = addToPassedStorage(tmdbId);
+    if (success) {
+      setLastPassedMovie({ tmdbId, timestamp: Date.now() });
+    }
     refresh();
+    return success;
   }, [refresh]);
 
   const unpassMovie = useCallback((tmdbId: number) => {
-    removeFromPassedStorage(tmdbId);
-    setLastPassedMovie((prev) => (prev?.tmdbId === tmdbId ? null : prev));
+    const success = removeFromPassedStorage(tmdbId);
+    if (success) {
+      setLastPassedMovie((prev) => (prev?.tmdbId === tmdbId ? null : prev));
+    }
     refresh();
+    return success;
   }, [refresh]);
 
   const isMoviePassedFn = useCallback((tmdbId: number) => {
