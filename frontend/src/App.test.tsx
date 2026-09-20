@@ -193,3 +193,91 @@ describe("App mood chip and recovery integration", () => {
     });
   });
 });
+
+describe("More like this functionality", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    readPopularCacheMock.mockReturnValue([CACHED_MOVIE]);
+    getPopularMock.mockResolvedValue([CACHED_MOVIE]);
+    window.history.replaceState(null, "", "/");
+  });
+
+  test("clicking 'More like this' triggers new search with correct query template", async () => {
+    const user = userEvent.setup();
+    const secondMovie: MovieRecommendation = {
+      tmdb_id: 3,
+      title: "Another Movie",
+      poster_path: "/another.jpg",
+      year: 2022,
+      vote_average: 8.0,
+      genres: ["Thriller"],
+      reason: "Suspenseful and gripping",
+      providers: [],
+    };
+    recommendMock
+      .mockResolvedValueOnce([RECOMMENDED_MOVIE])
+      .mockResolvedValueOnce([secondMovie]);
+
+    render(
+      <WatchlistProvider>
+        <App />
+      </WatchlistProvider>
+    );
+
+    const searchInput = screen.getByRole("textbox");
+    await user.clear(searchInput);
+    await user.type(searchInput, "dark and moody");
+    const searchButton = screen.getByRole("button", { name: "Search" });
+    await user.click(searchButton);
+
+    await waitFor(() => {
+      expect(screen.getByText("Recommended Movie")).toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    const moreLikeThisButton = screen.getByRole("button", { name: "Find more like this" });
+    await user.click(moreLikeThisButton);
+
+    await waitFor(() => {
+      expect(recommendMock).toHaveBeenCalledWith(
+        'movies like Recommended Movie, same vibe as "dark and moody"',
+        expect.any(AbortSignal)
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Another Movie")).toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    expect(screen.getByRole("textbox")).toHaveValue('movies like Recommended Movie, same vibe as "dark and moody"');
+  });
+
+  test("'More like this' updates URL with new query", async () => {
+    const user = userEvent.setup();
+    recommendMock.mockResolvedValue([RECOMMENDED_MOVIE]);
+
+    render(
+      <WatchlistProvider>
+        <App />
+      </WatchlistProvider>
+    );
+
+    const searchInput = screen.getByRole("textbox");
+    await user.clear(searchInput);
+    await user.type(searchInput, "test query");
+    const searchButton = screen.getByRole("button", { name: "Search" });
+    await user.click(searchButton);
+
+    await waitFor(() => {
+      expect(screen.getByText("Recommended Movie")).toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    expect(window.location.search).toBe("?q=test%20query");
+
+    const moreLikeThisButton = screen.getByRole("button", { name: "Find more like this" });
+    await user.click(moreLikeThisButton);
+
+    await waitFor(() => {
+      expect(window.location.search).toBe("?q=movies%20like%20Recommended%20Movie%2C%20same%20vibe%20as%20%22test%20query%22");
+    });
+  });
+});

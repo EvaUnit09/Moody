@@ -201,6 +201,66 @@ describe("ResultsGrid", () => {
       expect(screen.getByLabelText("Add to watchlist")).toBeInTheDocument();
     });
   });
+
+  it("calls onMoreLikeThis with title and current query when button clicked", async () => {
+    const user = userEvent.setup();
+    const onMoreLikeThis = vi.fn();
+    render(
+      <WatchlistProvider>
+        <ResultsGrid 
+          results={[mockMovie1, mockMovie2]} 
+          currentQuery="dark and moody films"
+          onMoreLikeThis={onMoreLikeThis}
+        />
+      </WatchlistProvider>
+    );
+
+    const moreLikeThisButtons = screen.getAllByRole("button", { name: "Find more like this" });
+    await user.click(moreLikeThisButtons[0]);
+
+    expect(onMoreLikeThis).toHaveBeenCalledTimes(1);
+    expect(onMoreLikeThis).toHaveBeenCalledWith("Test Movie 1", "dark and moody films");
+  });
+
+  it("renders 'More like this' button when onMoreLikeThis provided", () => {
+    const onMoreLikeThis = vi.fn();
+    render(
+      <WatchlistProvider>
+        <ResultsGrid 
+          results={[mockMovie1]} 
+          currentQuery="test query"
+          onMoreLikeThis={onMoreLikeThis}
+        />
+      </WatchlistProvider>
+    );
+
+    expect(screen.getByRole("button", { name: "Find more like this" })).toBeInTheDocument();
+  });
+
+  it("does not render 'More like this' button when onMoreLikeThis not provided", () => {
+    render(
+      <WatchlistProvider>
+        <ResultsGrid results={[mockMovie1]} />
+      </WatchlistProvider>
+    );
+
+    expect(screen.queryByRole("button", { name: "Find more like this" })).not.toBeInTheDocument();
+  });
+
+  it("does not render 'More like this' button when currentQuery is empty", () => {
+    const onMoreLikeThis = vi.fn();
+    render(
+      <WatchlistProvider>
+        <ResultsGrid 
+          results={[mockMovie1]} 
+          currentQuery=""
+          onMoreLikeThis={onMoreLikeThis}
+        />
+      </WatchlistProvider>
+    );
+
+    expect(screen.queryByRole("button", { name: "Find more like this" })).not.toBeInTheDocument();
+  });
 });
 
 describe("ResultsGrid Sorting", () => {
