@@ -15,8 +15,10 @@ create table if not exists movies (
     popularity double precision,
     vote_average double precision,
     vote_count integer,
-    embedding vector(1536)
+    embedding vector(1536),
+    embedding_half halfvec(1536)
 );
 
-create index if not exists movies_embedding_hnsw_idx
-    on movies using hnsw (embedding vector_cosine_ops);
+create index if not exists movies_embedding_half_hnsw_idx
+    on movies using hnsw (embedding_half halfvec_cosine_ops)
+    with (m = 16, ef_construction = 64);

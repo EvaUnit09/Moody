@@ -135,6 +135,36 @@
   margin: 0;
 }
 
+.sort-pills {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.sort-pill {
+  cursor: pointer;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+  color: var(--color-neutral-300);
+  border: 1px solid transparent;
+}
+
+.sort-pill:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: var(--color-text);
+}
+
+.sort-pill-active {
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  color: var(--color-accent);
+  border-color: var(--color-accent-700);
+}
+
 .share-btn {
   display: flex;
   align-items: center;
@@ -544,4 +574,71 @@ img.movie-card-poster:not(.movie-card-poster-loaded) {
     width: 100%;
     max-width: none;
   }
+}
+
+.recent-moods-section {
+  margin-bottom: var(--space-6);
+}
+
+.recent-moods-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+  padding: 0 var(--space-2);
+}
+
+.recent-moods-label {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.recent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.recent-chip {
+  cursor: pointer;
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  font: inherit;
+  transition: all 0.2s ease;
+}
+
+.recent-chip:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+  transform: translateY(-1px);
+}
+
+.recent-chip:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.recent-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  transition: opacity 0.2s ease;
+}
+
+.btn-link:hover:not(:disabled) {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+.btn-link:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
