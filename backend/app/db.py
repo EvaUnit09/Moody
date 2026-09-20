@@ -42,10 +42,10 @@ async def search_similar(embedding: list[float], limit: int = 25) -> list[dict]:
         """
         select tmdb_id, title, overview, genre_ids, keywords, poster_path,
                extract(year from release_date)::int as year, vote_average,
-               embedding <=> $1 as distance
+               embedding_half <=> $1 as distance
         from movies
         where vote_average >= $3
-        order by embedding <=> $1
+        order by embedding_half <=> $1
         limit $2
         """,
         embedding,
