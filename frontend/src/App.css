@@ -135,6 +135,36 @@
   margin: 0;
 }
 
+.sort-pills {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.sort-pill {
+  cursor: pointer;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+  color: var(--color-neutral-300);
+  border: 1px solid transparent;
+}
+
+.sort-pill:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: var(--color-text);
+}
+
+.sort-pill-active {
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  color: var(--color-accent);
+  border-color: var(--color-accent-700);
+}
+
 .share-btn {
   display: flex;
   align-items: center;
