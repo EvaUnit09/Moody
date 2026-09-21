@@ -53,7 +53,10 @@ def _build_prompt(query: str, candidates: list[dict]) -> str:
         f'User request: "{query}"\n\n'
         f"Candidate movies (from vector search):\n{candidate_lines}\n\n"
         f"Pick the best {TOP_N} matches for the user's request and give a "
-        "one-line reason for each, grounded in the movie's overview."
+        "one-line reason for each, grounded in the movie's overview. Judge "
+        "fit by mood, theme, and content, not by whether the request's words "
+        "literally appear in the title — a movie titled after the request "
+        "isn't a good match unless its overview also fits."
     )
 
 

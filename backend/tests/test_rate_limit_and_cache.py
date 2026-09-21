@@ -171,112 +171,115 @@ class TestRateLimiting:
         client = TestClient(app)
         
         # Mock the recommend logic to avoid actual API calls
-        with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
-            with patch('app.routers.recommend.search_similar', new_callable=AsyncMock) as mock_search:
-                with patch('app.routers.recommend.rerank', new_callable=AsyncMock) as mock_rerank:
-                    mock_embed.return_value = [0.1] * 1536
-                    mock_search.return_value = []
-                    mock_rerank.return_value = [
-                        {
-                            "tmdb_id": 1,
-                            "title": "Test Movie",
-                            "poster_path": "/test.jpg",
-                            "year": 2024,
-                            "vote_average": 7.5,
-                            "genres": ["Drama"],
-                            "reason": "A great movie for your mood"
-                        }
-                    ]
-                    
-                    # Make requests up to the limit (10/minute)
-                    for i in range(10):
+        with patch('app.routers.recommend.expand_query', new_callable=AsyncMock, side_effect=lambda q: q):
+            with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
+                with patch('app.routers.recommend.search_similar', new_callable=AsyncMock) as mock_search:
+                    with patch('app.routers.recommend.rerank', new_callable=AsyncMock) as mock_rerank:
+                        mock_embed.return_value = [0.1] * 1536
+                        mock_search.return_value = []
+                        mock_rerank.return_value = [
+                            {
+                                "tmdb_id": 1,
+                                "title": "Test Movie",
+                                "poster_path": "/test.jpg",
+                                "year": 2024,
+                                "vote_average": 7.5,
+                                "genres": ["Drama"],
+                                "reason": "A great movie for your mood"
+                            }
+                        ]
+
+                        # Make requests up to the limit (10/minute)
+                        for i in range(10):
+                            response = client.post(
+                                "/recommend",
+                                json={"query": f"test query {i}"}  # Different queries to avoid cache
+                            )
+                            assert response.status_code == 200, f"Request {i+1} should succeed"
+
+                        # 11th request should be rate limited
                         response = client.post(
                             "/recommend",
-                            json={"query": f"test query {i}"}  # Different queries to avoid cache
+                            json={"query": "test query 11"}
                         )
-                        assert response.status_code == 200, f"Request {i+1} should succeed"
-                    
-                    # 11th request should be rate limited
-                    response = client.post(
-                        "/recommend",
-                        json={"query": "test query 11"}
-                    )
-                    assert response.status_code == 429
-                    
-                    # Check friendly error message
-                    data = response.json()
-                    assert "error" in data
-                    assert "rate limit" in data["error"].lower()
-                    assert "message" in data
-                    assert "try again" in data["message"].lower()
-                    
-                    # Check Retry-After header
-                    assert "retry-after" in response.headers
-                    assert response.headers["retry-after"] == "60"
+                        assert response.status_code == 429
+
+                        # Check friendly error message
+                        data = response.json()
+                        assert "error" in data
+                        assert "rate limit" in data["error"].lower()
+                        assert "message" in data
+                        assert "try again" in data["message"].lower()
+
+                        # Check Retry-After header
+                        assert "retry-after" in response.headers
+                        assert response.headers["retry-after"] == "60"
 
     def test_rate_limit_friendly_message(self):
         """Rate limit response should have friendly JSON body."""
         client = TestClient(app)
         
         # Mock to avoid API calls
-        with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
-            with patch('app.routers.recommend.search_similar', new_callable=AsyncMock) as mock_search:
-                with patch('app.routers.recommend.rerank', new_callable=AsyncMock) as mock_rerank:
-                    mock_embed.return_value = [0.1] * 1536
-                    mock_search.return_value = []
-                    mock_rerank.return_value = [{
-                        "tmdb_id": 1,
-                        "title": "Test",
-                        "poster_path": "/test.jpg",
-                        "year": 2024,
-                        "vote_average": 7.5,
-                        "genres": ["Drama"],
-                        "reason": "Good movie"
-                    }]
-                    
-                    # Exhaust rate limit
-                    for i in range(10):
-                        client.post("/recommend", json={"query": f"query {i}"})
-                    
-                    # Get 429 response
-                    response = client.post("/recommend", json={"query": "one more"})
-                    
-                    assert response.status_code == 429
-                    data = response.json()
-                    
-                    # Verify message structure
-                    assert "error" in data
-                    assert "message" in data
-                    assert isinstance(data["message"], str)
-                    assert len(data["message"]) > 0
+        with patch('app.routers.recommend.expand_query', new_callable=AsyncMock, side_effect=lambda q: q):
+            with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
+                with patch('app.routers.recommend.search_similar', new_callable=AsyncMock) as mock_search:
+                    with patch('app.routers.recommend.rerank', new_callable=AsyncMock) as mock_rerank:
+                        mock_embed.return_value = [0.1] * 1536
+                        mock_search.return_value = []
+                        mock_rerank.return_value = [{
+                            "tmdb_id": 1,
+                            "title": "Test",
+                            "poster_path": "/test.jpg",
+                            "year": 2024,
+                            "vote_average": 7.5,
+                            "genres": ["Drama"],
+                            "reason": "Good movie"
+                        }]
+
+                        # Exhaust rate limit
+                        for i in range(10):
+                            client.post("/recommend", json={"query": f"query {i}"})
+
+                        # Get 429 response
+                        response = client.post("/recommend", json={"query": "one more"})
+
+                        assert response.status_code == 429
+                        data = response.json()
+
+                        # Verify message structure
+                        assert "error" in data
+                        assert "message" in data
+                        assert isinstance(data["message"], str)
+                        assert len(data["message"]) > 0
 
     def test_other_routes_not_rate_limited(self):
         """Other routes should not be affected by /recommend rate limiting."""
         client = TestClient(app)
         
         # First, exhaust the /recommend rate limit
-        with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
-            with patch('app.routers.recommend.search_similar', new_callable=AsyncMock) as mock_search:
-                with patch('app.routers.recommend.rerank', new_callable=AsyncMock) as mock_rerank:
-                    mock_embed.return_value = [0.1] * 1536
-                    mock_search.return_value = []
-                    mock_rerank.return_value = [{
-                        "tmdb_id": 1,
-                        "title": "Test",
-                        "poster_path": "/test.jpg",
-                        "year": 2024,
-                        "vote_average": 7.5,
-                        "genres": ["Drama"],
-                        "reason": "Good movie"
-                    }]
-                    
-                    # Exhaust rate limit on /recommend
-                    for i in range(10):
-                        client.post("/recommend", json={"query": f"query {i}"})
-                    
-                    # Verify /recommend is rate limited
-                    response = client.post("/recommend", json={"query": "one more"})
-                    assert response.status_code == 429
+        with patch('app.routers.recommend.expand_query', new_callable=AsyncMock, side_effect=lambda q: q):
+            with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
+                with patch('app.routers.recommend.search_similar', new_callable=AsyncMock) as mock_search:
+                    with patch('app.routers.recommend.rerank', new_callable=AsyncMock) as mock_rerank:
+                        mock_embed.return_value = [0.1] * 1536
+                        mock_search.return_value = []
+                        mock_rerank.return_value = [{
+                            "tmdb_id": 1,
+                            "title": "Test",
+                            "poster_path": "/test.jpg",
+                            "year": 2024,
+                            "vote_average": 7.5,
+                            "genres": ["Drama"],
+                            "reason": "Good movie"
+                        }]
+
+                        # Exhaust rate limit on /recommend
+                        for i in range(10):
+                            client.post("/recommend", json={"query": f"query {i}"})
+
+                        # Verify /recommend is rate limited
+                        response = client.post("/recommend", json={"query": "one more"})
+                        assert response.status_code == 429
         
         # Now test other routes - they should still work
         # Mock popular movies for /popular endpoint
@@ -316,36 +319,37 @@ class TestCacheWithRateLimit:
         """Cache hits still count toward rate limit (they're still requests)."""
         client = TestClient(app)
         
-        with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
-            with patch('app.routers.recommend.search_similar', new_callable=AsyncMock) as mock_search:
-                with patch('app.routers.recommend.rerank', new_callable=AsyncMock) as mock_rerank:
-                    mock_embed.return_value = [0.1] * 1536
-                    mock_search.return_value = []
-                    mock_rerank.return_value = [{
-                        "tmdb_id": 1,
-                        "title": "Test",
-                        "poster_path": "/test.jpg",
-                        "year": 2024,
-                        "vote_average": 7.5,
-                        "genres": ["Drama"],
-                        "reason": "Good movie"
-                    }]
-                    
-                    # Make one request to populate cache
-                    response = client.post("/recommend", json={"query": "test"})
-                    assert response.status_code == 200
-                    
-                    # Verify LLM was called once
-                    assert mock_rerank.call_count == 1
-                    
-                    # Make 9 more identical requests (should hit cache)
-                    for i in range(9):
+        with patch('app.routers.recommend.expand_query', new_callable=AsyncMock, side_effect=lambda q: q):
+            with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
+                with patch('app.routers.recommend.search_similar', new_callable=AsyncMock) as mock_search:
+                    with patch('app.routers.recommend.rerank', new_callable=AsyncMock) as mock_rerank:
+                        mock_embed.return_value = [0.1] * 1536
+                        mock_search.return_value = []
+                        mock_rerank.return_value = [{
+                            "tmdb_id": 1,
+                            "title": "Test",
+                            "poster_path": "/test.jpg",
+                            "year": 2024,
+                            "vote_average": 7.5,
+                            "genres": ["Drama"],
+                            "reason": "Good movie"
+                        }]
+
+                        # Make one request to populate cache
                         response = client.post("/recommend", json={"query": "test"})
                         assert response.status_code == 200
-                    
-                    # Verify LLM was NOT called again (cache working)
-                    assert mock_rerank.call_count == 1
-                    
-                    # 11th request should be rate limited, even though it's a cache hit
-                    response = client.post("/recommend", json={"query": "test"})
-                    assert response.status_code == 429
+
+                        # Verify LLM was called once
+                        assert mock_rerank.call_count == 1
+
+                        # Make 9 more identical requests (should hit cache)
+                        for i in range(9):
+                            response = client.post("/recommend", json={"query": "test"})
+                            assert response.status_code == 200
+
+                        # Verify LLM was NOT called again (cache working)
+                        assert mock_rerank.call_count == 1
+
+                        # 11th request should be rate limited, even though it's a cache hit
+                        response = client.post("/recommend", json={"query": "test"})
+                        assert response.status_code == 429

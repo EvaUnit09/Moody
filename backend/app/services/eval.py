@@ -10,6 +10,7 @@ from typing import Any
 
 from app.db import search_similar
 from app.services.embeddings import embed_text
+from app.services.query_intent import expand_query
 from app.services.rerank import rerank
 
 
@@ -105,6 +106,16 @@ class EvaluationHarness:
                 expected_genres=["Family", "Animation", "Adventure"],
                 min_results=3,
             ),
+            EvalQuery(
+                query="Fall",
+                description=(
+                    "Ambiguous single-word season query — regression guard for "
+                    "literal title-match bias (should mean 'autumn-appropriate "
+                    "movies', not the movie titled Fall)"
+                ),
+                expected_genres=["Drama", "Romance", "Family", "Comedy", "Fantasy"],
+                min_results=3,
+            ),
         ]
 
     @staticmethod
@@ -116,7 +127,8 @@ class EvaluationHarness:
         and reason quality indicators.
         """
         # Run through the full pipeline
-        embedding = await embed_text(eval_query.query)
+        search_query = await expand_query(eval_query.query)
+        embedding = await embed_text(search_query)
         candidates = await search_similar(embedding, limit=25)
         results = await rerank(eval_query.query, candidates)
 
