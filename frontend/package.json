@@ -1,7 +1,8 @@
 {
-  "name": "frontend",
+  "name": "moody-frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Frontend for Moody — a mood-based movie recommendation app (RAG over TMDB data with LLM reranking).",
   "type": "module",
   "scripts": {
     "dev": "vite",

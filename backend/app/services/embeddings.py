@@ -7,7 +7,7 @@ EMBEDDING_MODEL = "text-embedding-3-small"
 BATCH_SIZE = 100
 PROGRESS_INTERVAL = 1000
 
-client = AsyncOpenAI(api_key=settings.openai_api_key)
+client = AsyncOpenAI(api_key=settings.openai_api_key, timeout=20.0)
 
 
 @DatadogObservability.trace_embedding

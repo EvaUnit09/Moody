@@ -19,7 +19,7 @@ except ImportError:
 RERANK_MODEL = "claude-haiku-4-5"
 TOP_N = 6
 
-client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=20.0)
 
 RERANK_TOOL = {
     "name": "return_recommendations",
@@ -94,7 +94,12 @@ async def rerank(query: str, candidates: list[dict]) -> list[dict]:
         if PROMPT_AVAILABLE and Prompt is not None:
             prompt_annotation = Prompt(
                 id="rerank_prompt",
-                template=f'User request: "{{query}}"\n\nCandidate movies (from vector search):\n{{context}}\n\nPick the best {TOP_N} matches for the user\'s request and give a one-line reason for each, grounded in the movie\'s overview.',
+                template=(
+                    'User request: "{query}"\n\n'
+                    "Candidate movies (from vector search):\n{context}\n\n"
+                    f"Pick the best {TOP_N} matches for the user's request and "
+                    "give a one-line reason for each, grounded in the movie's overview."
+                ),
                 variables={"query": query, "context": context},
                 rag_query_variables=["query"],
                 rag_context_variables=["context"],

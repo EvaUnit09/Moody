@@ -10,5 +10,13 @@ export default defineConfig({
     // Node's built-in experimental `localStorage` global shadows jsdom's
     // window.localStorage in newer Node versions unless disabled here.
     env: { NODE_OPTIONS: '--no-experimental-webstorage' },
+    coverage: {
+      thresholds: {
+        statements: 70,
+        branches: 65,
+        functions: 70,
+        lines: 70,
+      },
+    },
   },
 })

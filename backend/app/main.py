@@ -4,14 +4,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.db import close_pool, get_pool
 from app.routers.popular import router as popular_router
 from app.routers.popular import warm_popular_cache
-from app.routers.recommend import router as recommend_router, limiter
+from app.routers.recommend import limiter
+from app.routers.recommend import router as recommend_router
 from app.services.observability import DatadogObservability
 
 POPULAR_CACHE_REFRESH_SECONDS = 3300  # keep the cache warm ahead of its 3600s TTL

@@ -4,8 +4,8 @@ import asyncpg
 from pgvector.asyncpg import register_vector
 
 from app.config import settings
-from app.services.tmdb import MIN_VOTE_AVERAGE, genre_names
 from app.services.observability import DatadogObservability
+from app.services.tmdb import MIN_VOTE_AVERAGE, genre_names
 
 _pool: asyncpg.Pool | None = None
 
@@ -117,7 +117,7 @@ async def upsert_movies(movies: list[dict], embeddings: list[list[float]]) -> No
             movie.get("vote_count"),
             embedding,
         )
-        for movie, embedding in zip(movies, embeddings)
+        for movie, embedding in zip(movies, embeddings, strict=True)
     ]
     async with pool.acquire() as conn:
         for i in range(0, len(rows), UPSERT_BATCH_SIZE):

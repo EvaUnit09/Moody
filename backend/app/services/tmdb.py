@@ -1,7 +1,6 @@
 import os
 import re
 from typing import Any
-from functools import lru_cache
 
 import httpx
 from dotenv import load_dotenv
@@ -148,7 +147,11 @@ class WatchProviderService:
                 for provider in providers[:cls.MAX_PROVIDERS]:
                     provider_data = {
                         "name": provider.get("provider_name", ""),
-                        "logo_url": f"{cls.LOGO_BASE_URL}{provider['logo_path']}" if provider.get("logo_path") else None,
+                        "logo_url": (
+                            f"{cls.LOGO_BASE_URL}{provider['logo_path']}"
+                            if provider.get("logo_path")
+                            else None
+                        ),
                         "link": link,
                     }
                     result.append(provider_data)

@@ -5,7 +5,7 @@ from app.services.observability import DatadogObservability
 
 EXPANSION_MODEL = "claude-haiku-4-5"
 
-client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=20.0)
 
 EXPAND_QUERY_TOOL = {
     "name": "expand_search_query",

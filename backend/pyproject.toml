@@ -1,0 +1,16 @@
+[project]
+name = "moody-backend"
+version = "1.0.0"
+description = "Backend for Moody — a mood-based movie recommendation app (RAG over TMDB data with LLM reranking)."
+requires-python = ">=3.11"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.coverage.run]
+# One-off ingestion/eval scripts, run manually and not exercised by the test suite.
+omit = ["app/scripts/*"]

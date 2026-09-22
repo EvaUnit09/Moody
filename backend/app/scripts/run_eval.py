@@ -86,7 +86,9 @@ async def main() -> None:
                     
                     if verbose:
                         print("  Recommendations:")
-                        for i, (title, reason) in enumerate(zip(result['titles'], result['reasons']), 1):
+                        for i, (title, reason) in enumerate(
+                            zip(result['titles'], result['reasons'], strict=True), 1
+                        ):
                             print(f"    {i}. {title}")
                             print(f"       → {reason}")
                 

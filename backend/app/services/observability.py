@@ -5,8 +5,9 @@ Provides custom spans for embedding, vector search, and LLM reranking calls,
 plus LLM Observability integration for tracking token usage and costs.
 """
 
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
 from functools import wraps
+from typing import Any, TypeVar
 
 from app.config import settings
 
