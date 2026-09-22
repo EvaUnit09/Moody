@@ -13,8 +13,7 @@ genre/year dropdowns.
 1. ~30k movies (title, overview, genres, keywords) are embedded and stored in
    Postgres via pgvector.
 2. A user's natural-language query (e.g. "something slow and melancholic")
-   is expanded by an LLM if it's short/ambiguous, then embedded with the same
-   model.
+   is expanded by an LLM (Haiku) if it's short/ambiguous, then embedded with text-embedding-3-small.
 3. Vector search pulls the top candidates by cosine similarity.
 4. An LLM reranks the candidates down to a shortlist and writes a one-line
    reason for each pick, grounded in the movie's overview.
@@ -36,36 +35,6 @@ original implementation plan.
 - **Observability:** Datadog APM + LLM Observability
 - **Hosting:** Vercel (frontend), Railway (backend)
 
-## Running locally
-
-### Backend
-
-```bash
-cd backend
-cp .env.example .env   # fill in OPENAI_API_KEY, ANTHROPIC_API_KEY, SUPABASE_DB_URL
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-Requires a Postgres database with the `vector` extension enabled and the
-`movies` table from `backend/sql/schema.sql`, populated via
-`backend/app/scripts/fetch_movies.py` + `build_embeddings.py`.
-
-### Frontend
-
-```bash
-cd frontend
-cp .env.example .env.local   # defaults to http://localhost:8000, adjust if needed
-npm install
-npm run dev
-```
-
-### Tests
-
-```bash
-cd backend && pytest              # 66 tests
-cd frontend && npm test           # 152 tests (3 skipped)
-```
 
 ## Known limitations / what I'd improve next
 
