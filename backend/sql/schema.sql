@@ -15,7 +15,6 @@ create table if not exists movies (
     popularity double precision,
     vote_average double precision,
     vote_count integer,
-    embedding vector(1536),
     embedding_half halfvec(1536)
 );
 

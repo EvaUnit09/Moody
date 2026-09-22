@@ -78,9 +78,9 @@ _UPSERT_SQL = """
     insert into movies (
         tmdb_id, title, original_title, original_language, overview,
         genre_ids, keywords, poster_path, backdrop_path, release_date,
-        popularity, vote_average, vote_count, embedding
+        popularity, vote_average, vote_count, embedding_half
     )
-    values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::vector(1536)::halfvec(1536))
     on conflict (tmdb_id) do update set
         title = excluded.title,
         original_title = excluded.original_title,
@@ -94,7 +94,7 @@ _UPSERT_SQL = """
         popularity = excluded.popularity,
         vote_average = excluded.vote_average,
         vote_count = excluded.vote_count,
-        embedding = excluded.embedding
+        embedding_half = excluded.embedding_half
 """
 
 
