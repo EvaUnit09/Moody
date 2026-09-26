@@ -4,9 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    openai_api_key: str
+    openai_api_key: str | None = None  # Optional: only needed for embeddings and /recommend
     supabase_db_url: str
-    anthropic_api_key: str
+    anthropic_api_key: str | None = None  # Optional: only needed for /recommend reranking
     allowed_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"
         "http://localhost:5174,http://127.0.0.1:5174"

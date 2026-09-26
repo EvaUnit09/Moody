@@ -45,26 +45,24 @@ class TestRerank:
     @pytest.mark.asyncio
     async def test_empty_candidates_returns_empty_without_calling_model(self):
         """No candidates means nothing to rerank — skip the LLM call entirely."""
-        with patch(
-            "app.services.rerank.client.messages.create",
-            new_callable=AsyncMock,
-        ) as mock_create:
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock()
+        
+        with patch("app.services.rerank._get_client", return_value=mock_client):
             result = await rerank("cozy autumn movies", [])
 
             assert result == []
-            mock_create.assert_not_awaited()
+            mock_client.messages.create.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_merges_model_reason_onto_candidate_data(self):
         """Picked candidates should keep their original fields plus the model's reason."""
-        with patch(
-            "app.services.rerank.client.messages.create",
-            new_callable=AsyncMock,
-        ) as mock_create:
-            mock_create.return_value = _mock_message(
-                [{"tmdb_id": 2, "reason": "Great for a laugh."}]
-            )
-
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(
+            return_value=_mock_message([{"tmdb_id": 2, "reason": "Great for a laugh."}])
+        )
+        
+        with patch("app.services.rerank._get_client", return_value=mock_client):
             result = await rerank("something funny", CANDIDATES)
 
             assert result == [
@@ -79,17 +77,15 @@ class TestRerank:
     @pytest.mark.asyncio
     async def test_skips_picks_with_unknown_tmdb_id(self):
         """A pick referencing an id not in the candidate pool should be dropped."""
-        with patch(
-            "app.services.rerank.client.messages.create",
-            new_callable=AsyncMock,
-        ) as mock_create:
-            mock_create.return_value = _mock_message(
-                [
-                    {"tmdb_id": 999, "reason": "Not a real candidate."},
-                    {"tmdb_id": 1, "reason": "A solid pick."},
-                ]
-            )
-
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(
+            return_value=_mock_message([
+                {"tmdb_id": 999, "reason": "Not a real candidate."},
+                {"tmdb_id": 1, "reason": "A solid pick."},
+            ])
+        )
+        
+        with patch("app.services.rerank._get_client", return_value=mock_client):
             result = await rerank("a quiet evening", CANDIDATES)
 
             assert len(result) == 1
@@ -106,12 +102,10 @@ class TestRerank:
             {"tmdb_id": i, "reason": f"Reason {i}"} for i in range(TOP_N + 3)
         ]
 
-        with patch(
-            "app.services.rerank.client.messages.create",
-            new_callable=AsyncMock,
-        ) as mock_create:
-            mock_create.return_value = _mock_message(picks)
-
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(return_value=_mock_message(picks))
+        
+        with patch("app.services.rerank._get_client", return_value=mock_client):
             result = await rerank("anything", many_candidates)
 
             assert len(result) == TOP_N
@@ -119,17 +113,15 @@ class TestRerank:
     @pytest.mark.asyncio
     async def test_includes_query_and_candidates_in_prompt(self):
         """The prompt sent to the model should include the query and candidate titles."""
-        with patch(
-            "app.services.rerank.client.messages.create",
-            new_callable=AsyncMock,
-        ) as mock_create:
-            mock_create.return_value = _mock_message(
-                [{"tmdb_id": 1, "reason": "Fits the mood."}]
-            )
-
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(
+            return_value=_mock_message([{"tmdb_id": 1, "reason": "Fits the mood."}])
+        )
+        
+        with patch("app.services.rerank._get_client", return_value=mock_client):
             await rerank("a quiet evening", CANDIDATES)
 
-            call_kwargs = mock_create.call_args.kwargs
+            call_kwargs = mock_client.messages.create.call_args.kwargs
             prompt = call_kwargs["messages"][0]["content"]
             assert "a quiet evening" in prompt
             assert "Movie One" in prompt

@@ -37,29 +37,25 @@ class TestExpandQuery:
     @pytest.mark.asyncio
     async def test_expands_ambiguous_single_word_query(self):
         """A short, title-collision-prone query should be rewritten by the model."""
-        with patch(
-            "app.services.query_intent.client.messages.create",
-            new_callable=AsyncMock,
-        ) as mock_create:
-            mock_create.return_value = _mock_message(
-                "cozy, atmospheric movies to watch during autumn"
-            )
-
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(
+            return_value=_mock_message("cozy, atmospheric movies to watch during autumn")
+        )
+        
+        with patch("app.services.query_intent._get_client", return_value=mock_client):
             result = await expand_query("Fall")
 
             assert result == "cozy, atmospheric movies to watch during autumn"
-            mock_create.assert_awaited_once()
+            mock_client.messages.create.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_passes_through_already_descriptive_query(self):
         """A clear, descriptive query can be returned unchanged by the model."""
         query = "a gripping crime thriller with unexpected twists"
-        with patch(
-            "app.services.query_intent.client.messages.create",
-            new_callable=AsyncMock,
-        ) as mock_create:
-            mock_create.return_value = _mock_message(query)
-
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(return_value=_mock_message(query))
+        
+        with patch("app.services.query_intent._get_client", return_value=mock_client):
             result = await expand_query(query)
 
             assert result == query
@@ -67,12 +63,10 @@ class TestExpandQuery:
     @pytest.mark.asyncio
     async def test_falls_back_to_original_query_on_empty_response(self):
         """An empty expanded_query from the model should not blank out the search."""
-        with patch(
-            "app.services.query_intent.client.messages.create",
-            new_callable=AsyncMock,
-        ) as mock_create:
-            mock_create.return_value = _mock_message("")
-
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(return_value=_mock_message(""))
+        
+        with patch("app.services.query_intent._get_client", return_value=mock_client):
             result = await expand_query("Fall")
 
             assert result == "Fall"
@@ -80,14 +74,12 @@ class TestExpandQuery:
     @pytest.mark.asyncio
     async def test_sends_original_query_in_prompt(self):
         """The original query should be included in the prompt sent to the model."""
-        with patch(
-            "app.services.query_intent.client.messages.create",
-            new_callable=AsyncMock,
-        ) as mock_create:
-            mock_create.return_value = _mock_message("autumn-appropriate movies")
-
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(return_value=_mock_message("autumn-appropriate movies"))
+        
+        with patch("app.services.query_intent._get_client", return_value=mock_client):
             await expand_query("Fall")
 
-            call_kwargs = mock_create.call_args.kwargs
+            call_kwargs = mock_client.messages.create.call_args.kwargs
             prompt = call_kwargs["messages"][0]["content"]
             assert "Fall" in prompt

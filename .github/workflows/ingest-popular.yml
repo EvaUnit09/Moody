@@ -1,0 +1,43 @@
+name: Ingest Popular Movies
+
+# Scheduled ingest of TMDB popular/trending movies.
+# Updates popularity metrics in the movies table to keep the /popular carousel
+# fresh, without overwriting enriched keywords or embeddings.
+#
+# Schedule: Every 12 hours (midnight and noon UTC)
+# Required secrets: TMDB_API_READ_TOKEN, SUPABASE_DB_URL
+
+on:
+  workflow_dispatch: # Manual trigger for testing
+  schedule:
+    # Run every 12 hours at midnight and noon UTC
+    - cron: "0 0,12 * * *"
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Run ingest script
+        env:
+          API_READ_ACCESS_TOKEN: ${{ secrets.TMDB_API_READ_TOKEN }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: python -m app.scripts.ingest_popular
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Ingest failed. Check logs for TMDB/DB errors."
+          echo "Existing popular shelf remains unchanged."
