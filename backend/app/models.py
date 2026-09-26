@@ -6,6 +6,7 @@ class RecommendRequest(BaseModel):
     region: str | None = None
     exclude_tmdb_ids: list[int] | None = Field(
         default=None,
+        max_length=100,
         description="TMDB IDs to exclude from recommendations (e.g., previously passed/hidden titles)"
     )
 

@@ -91,13 +91,14 @@ def _is_popular_mood(query: str) -> bool:
 def build_cache_key(query: str, exclude_tmdb_ids: list[int] | None = None) -> str:
     """Build cache key from query and optional exclude list.
     
-    Normalizes query and includes sorted exclude_tmdb_ids to ensure
+    Normalizes query and includes sorted, deduplicated exclude_tmdb_ids to ensure
     cache hits only when both query and excludes match.
+    Deduplicates with set() so [1,1,2] matches [1,2].
     """
     key = normalize_query(query)
     if exclude_tmdb_ids:
-        # Sort to ensure [1,2,3] and [3,2,1] produce same key
-        exclude_str = ",".join(str(id) for id in sorted(exclude_tmdb_ids))
+        # Dedupe with set(), then sort to ensure [1,2,3] and [3,2,1] and [1,1,2] produce same key
+        exclude_str = ",".join(str(id) for id in sorted(set(exclude_tmdb_ids)))
         key = f"{key}:exclude:{exclude_str}"
     return key
 

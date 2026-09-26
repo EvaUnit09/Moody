@@ -105,6 +105,33 @@ class TestRecommendEnrichment:
 class TestExcludeFiltering:
     """Test suite for exclude_tmdb_ids filtering."""
     
+    def test_exclude_list_oversize_rejected(self):
+        """Test that exclude list longer than 100 is rejected with 422."""
+        from fastapi.testclient import TestClient
+        from app.main import app
+        
+        client = TestClient(app)
+        
+        # Create a list with 101 items (over the limit of 100)
+        oversized_list = list(range(101))
+        
+        response = client.post(
+            "/recommend",
+            json={
+                "query": "action movies",
+                "region": "US",
+                "exclude_tmdb_ids": oversized_list
+            }
+        )
+        
+        # Should reject with 422 Unprocessable Entity
+        assert response.status_code == 422
+        data = response.json()
+        assert "detail" in data
+        # Verify error mentions the field and constraint
+        error_msg = str(data["detail"]).lower()
+        assert "exclude_tmdb_ids" in error_msg or "list" in error_msg
+    
     @pytest.mark.asyncio
     async def test_exclude_filters_candidates(self):
         """Test that excluded tmdb_ids are filtered from candidates before rerank."""
@@ -251,6 +278,23 @@ class TestExcludeCacheKey:
         assert "13" in key1
         assert "550" in key1
         assert "680" in key1
+    
+    def test_build_cache_key_deduplicates_excludes(self):
+        """Test cache key deduplicates exclude list so [1,1,2] matches [1,2]."""
+        key1 = cache.build_cache_key("action movies", [1, 2])
+        key2 = cache.build_cache_key("action movies", [1, 1, 2])  # Duplicates
+        key3 = cache.build_cache_key("action movies", [2, 1, 1])  # Duplicates, different order
+        
+        # All should produce same key
+        assert key1 == key2
+        assert key1 == key3
+        assert key2 == key3
+        
+        # Verify it contains deduplicated IDs
+        assert "1" in key1
+        assert "2" in key1
+        # Should not have duplicate representation in key string
+        assert key1 == cache.normalize_query("action movies") + ":exclude:1,2"
     
     def test_build_cache_key_without_excludes(self):
         """Test cache key without excludes matches current behavior."""
