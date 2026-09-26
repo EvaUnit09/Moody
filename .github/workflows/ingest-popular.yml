@@ -1,0 +1,47 @@
+name: Ingest Popular Movies
+
+# Scheduled ingest of TMDB popular/trending movies.
+# Runs the backend ingest script to refresh the movies table with current
+# popularity rankings, enabling the /popular carousel to stay up-to-date
+# without hitting TMDB on every request.
+#
+# Workflow is disabled by default (manual dispatch only). Ops should:
+# 1. Configure secrets (API_READ_ACCESS_TOKEN, OPENAI_API_KEY, SUPABASE_DB_URL)
+# 2. Set desired schedule (uncomment and adjust cron below)
+# 3. Verify Railway environment variables are production-ready
+
+on:
+  workflow_dispatch: # Manual trigger for testing
+  # schedule:
+  #   # Run daily at 6 AM UTC (suggested: every 12-24h for fresh popularity)
+  #   - cron: "0 6 * * *"
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Run ingest script
+        env:
+          API_READ_ACCESS_TOKEN: ${{ secrets.TMDB_API_READ_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: python -m app.scripts.ingest_popular
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Ingest failed. Check logs for TMDB/DB errors."
+          echo "Existing popular shelf remains unchanged."
