@@ -4,7 +4,7 @@ Ingest TMDB popular and trending movies into Supabase.
 
 Fetches current popular and trending movies from TMDB and updates their
 popularity metrics in the movies table. Preserves enriched keywords and
-embeddings. Notifies Railway to bust the __popular__ cache.
+embeddings.
 
 Usage:
     python -m app.scripts.ingest_popular
@@ -17,6 +17,11 @@ Exit codes:
     0: Success (popularity updated)
     1: TMDB API error (keep existing shelf, no DB changes)
     2: Database error (partial failure)
+
+Note:
+    This script runs in GitHub Actions and cannot bust Railway's in-memory cache.
+    Railway's __popular__ cache refreshes automatically within 1-2h via TTL or
+    the periodic warm cycle (~55 minutes).
 """
 
 import asyncio
@@ -142,7 +147,8 @@ async def ingest_popular() -> int:
         return 2
     
     print("=== Ingest complete ===")
-    print("Note: Railway app cache will refresh on next /popular request or periodic warm cycle")
+    print("Note: GitHub Actions cannot bust Railway's cache (process-local).")
+    print("Railway cache will refresh automatically within 1-2h (warm cycle ~55min or TTL).")
     return 0
 
 

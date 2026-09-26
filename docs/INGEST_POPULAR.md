@@ -111,19 +111,21 @@ Railway environment variables should already include the required keys.
 
 Monitor via GitHub Actions logs. Exit code 1 is expected occasionally (TMDB rate limits or downtime) and is safe.
 
-## Cache Behavior
+## Cache Behavior (Important)
+
+**Key limitation:** GitHub Actions runs in a separate process from Railway. Any cache bust in this script is **process-local and does NOT affect Railway's cache.**
 
 The Railway app maintains an in-memory `__popular__` cache with a 2-hour TTL. After a successful ingest:
 
-1. The database `popularity` column is updated
-2. The Railway app cache is NOT directly busted (GitHub Actions runs in a separate process)
-3. The cache refreshes automatically via:
+1. ✅ Database `popularity` column is updated
+2. ❌ Railway app cache is NOT busted (process separation)
+3. ✅ Cache refreshes automatically via:
+   - **Periodic warm cycle** every 55 minutes in Railway app
    - **Next `/popular` request** after TTL expires (2 hours)
-   - **Periodic warm cycle** every 55 minutes in the Railway app
 
-**Result:** Updated popularity rankings appear in `/popular` within 55 minutes of a successful ingest run.
+**Freshness:** Updated popularity rankings appear in `/popular` within **~55 minutes to 2 hours** after ingest (server cache TTL), **not immediately**.
 
-**Note:** The cache bust limitation is inherent to the architecture (GitHub Actions vs. Railway process separation). A shared cache store (Redis) would enable cross-process invalidation but is not currently implemented.
+**Why:** GitHub Actions and Railway run in separate processes. A shared cache store (Redis) would enable cross-process invalidation but is not currently implemented.
 
 ## Notes
 
