@@ -27,6 +27,8 @@ Before the scheduled workflow can run, configure these repository secrets:
 
 **To configure:** Go to GitHub repo Settings → Secrets and variables → Actions → New repository secret
 
+**Note:** `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are NOT required for this ingest workflow (popularity-only updates, no embedding generation).
+
 ### Adjusting the Schedule
 
 To change the cadence, edit the `cron` line in `.github/workflows/ingest-popular.yml`:
