@@ -169,7 +169,7 @@ async def update_popularity(movies: list[dict]) -> int:
     async with pool.acquire() as conn:
         for i in range(0, len(rows), UPSERT_BATCH_SIZE):
             batch = rows[i : i + UPSERT_BATCH_SIZE]
-            result = await conn.executemany(_UPDATE_POPULARITY_SQL, batch)
+            await conn.executemany(_UPDATE_POPULARITY_SQL, batch)
             updated += len(batch)
             print(f"Updated popularity for {min(i + UPSERT_BATCH_SIZE, len(rows))}/{len(rows)} movies")
     
