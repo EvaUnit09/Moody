@@ -11,6 +11,61 @@ The `/popular` endpoint serves movies ordered by the `popularity` column in the 
 3. Upserts into `movies` table (updates `popularity`, `vote_average`, etc.)
 4. Busts the `__popular__` in-memory cache so the next `/popular` request sees fresh data
 
+## Active Schedule
+
+**Current cadence:** Every 12 hours (midnight and noon UTC) via GitHub Actions
+
+The workflow runs automatically via `.github/workflows/ingest-popular.yml` with cron schedule `0 0,12 * * *`.
+
+### Required GitHub Secrets
+
+Before the scheduled workflow can run, configure these repository secrets:
+
+- ✅ `TMDB_API_READ_TOKEN` - TMDB API read access token
+- ✅ `OPENAI_API_KEY` - OpenAI API key for embeddings  
+- ✅ `SUPABASE_DB_URL` - Postgres connection string (production database)
+
+**To configure:** Go to GitHub repo Settings → Secrets and variables → Actions → New repository secret
+
+### Adjusting the Schedule
+
+To change the cadence, edit the `cron` line in `.github/workflows/ingest-popular.yml`:
+
+- **Daily (once per day):** `0 6 * * *` - runs at 6 AM UTC
+- **Every 6 hours:** `0 0,6,12,18 * * *` - runs at midnight, 6am, noon, 6pm UTC
+- **Every 24 hours:** `0 0 * * *` - runs at midnight UTC
+
+After editing, commit and push to `main`. The next run will follow the new schedule.
+
+### Rollback / Disabling
+
+To disable scheduled runs:
+
+1. **Option A (temporary):** Comment out the `schedule` block in the workflow:
+   ```yaml
+   # schedule:
+   #   - cron: "0 0,12 * * *"
+   ```
+
+2. **Option B (permanent):** Delete the workflow file or disable it via GitHub Actions UI
+
+Manual runs via `workflow_dispatch` remain available regardless of schedule state.
+
+## Failure Handling & Blast Radius
+
+### Fail-Safe Behavior
+
+If TMDB is down or unreachable, the script exits with code 1 and **does not modify the database**. The existing popular shelf remains available to users.
+
+If embeddings or DB upsert fail (exit 2), the shelf may be partially updated. Check GitHub Actions logs for details.
+
+### Blast Radius
+
+- **Scope:** Updates ~100-200 movies in the `movies` table (popular + trending sets)
+- **User impact:** `/popular` endpoint rankings refresh to reflect current TMDB popularity
+- **Rollback:** Popularity values are overwritten on each run; no manual rollback needed
+- **Cache:** In-memory `__popular__` cache is busted after successful ingest
+
 ## Running the script
 
 ### Locally
@@ -25,20 +80,18 @@ Requires environment variables in `.env`:
 - `OPENAI_API_KEY` - OpenAI API key for embeddings
 - `SUPABASE_DB_URL` - Postgres connection string
 
-### Via GitHub Actions
+### Via GitHub Actions (Active)
 
-A workflow stub is provided in `.github/workflows/ingest-popular.yml`:
+The workflow in `.github/workflows/ingest-popular.yml` is **currently enabled** and runs every 12 hours.
 
-1. **Configure secrets** in GitHub repo settings:
-   - `TMDB_API_READ_TOKEN`
-   - `OPENAI_API_KEY`
-   - `SUPABASE_DB_URL`
+**Monitoring:**
+- View workflow runs: GitHub repo → Actions → "Ingest Popular Movies"
+- Check logs for each run to verify success or diagnose failures
+- Failed runs will show in the Actions tab with red X indicators
 
-2. **Set schedule**: Uncomment and adjust the `cron` line in the workflow.
-   - **Suggested cadence**: Daily (every 12-24 hours)
-   - Example: `0 6 * * *` runs at 6 AM UTC daily
-
-3. **Enable workflow**: The workflow is set to `workflow_dispatch` (manual) by default for testing.
+**Manual trigger:**
+- Go to Actions → "Ingest Popular Movies" → "Run workflow" → Select branch → "Run workflow"
+- Useful for testing or forcing an immediate refresh
 
 ### Via Railway / Production cron
 
@@ -50,17 +103,13 @@ cd backend && python -m app.scripts.ingest_popular
 
 Railway environment variables should already include the required keys.
 
-## Exit codes
+## Exit Codes & Monitoring
 
-- **0**: Success (movies ingested, cache busted)
-- **1**: TMDB API error (existing shelf unchanged, safe failure)
-- **2**: Database or embedding error (partial failure)
+- **0**: Success (movies ingested, cache busted, `/popular` will show updated rankings)
+- **1**: TMDB API error (existing shelf unchanged, **safe failure**)
+- **2**: Database or embedding error (partial failure, check logs)
 
-## Failure handling
-
-If TMDB is down, the script exits with code 1 and **does not modify the database**. The existing popular shelf remains available.
-
-If embeddings or DB upsert fail (exit 2), the shelf may be partially updated. Check logs for details.
+Monitor via GitHub Actions logs. Exit code 1 is expected occasionally (TMDB rate limits or downtime) and is safe.
 
 ## Cache behavior
 

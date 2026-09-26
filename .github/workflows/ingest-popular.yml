@@ -5,16 +5,14 @@ name: Ingest Popular Movies
 # popularity rankings, enabling the /popular carousel to stay up-to-date
 # without hitting TMDB on every request.
 #
-# Workflow is disabled by default (manual dispatch only). Ops should:
-# 1. Configure secrets (API_READ_ACCESS_TOKEN, OPENAI_API_KEY, SUPABASE_DB_URL)
-# 2. Set desired schedule (uncomment and adjust cron below)
-# 3. Verify Railway environment variables are production-ready
+# Schedule: Every 12 hours (midnight and noon UTC)
+# Required secrets: TMDB_API_READ_TOKEN, OPENAI_API_KEY, SUPABASE_DB_URL
 
 on:
   workflow_dispatch: # Manual trigger for testing
-  # schedule:
-  #   # Run daily at 6 AM UTC (suggested: every 12-24h for fresh popularity)
-  #   - cron: "0 6 * * *"
+  schedule:
+    # Run every 12 hours at midnight and noon UTC
+    - cron: "0 0,12 * * *"
 
 jobs:
   ingest:
