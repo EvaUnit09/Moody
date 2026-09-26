@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getPopular, recommend, type Movie, type MovieRecommendation } from "./api";
 import { readPopularCache, writePopularCache } from "./lib/popularCache";
 import { getRecentMoods, addRecentMood, clearRecentMoods } from "./lib/recentMoods";
+import { getExcludePassedPreference, setExcludePassedPreference } from "./lib/excludePreference";
 import { SearchBox } from "./components/SearchBox";
 import { ResultsGrid } from "./components/ResultsGrid";
 import { SkeletonGrid } from "./components/SkeletonGrid";
@@ -36,9 +37,12 @@ function App() {
   );
   const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
   const [recentMoods, setRecentMoods] = useState<string[]>(() => getRecentMoods());
+  const [excludePassedMovies, setExcludePassedMovies] = useState<boolean>(
+    () => getExcludePassedPreference()
+  );
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
-  const { watchlist } = useWatchlist();
+  const { watchlist, passedMovies } = useWatchlist();
 
   useEffect(() => {
     const hadCachedMovies = readPopularCache() !== null;
@@ -89,7 +93,24 @@ function App() {
     const requestId = ++requestIdRef.current;
 
     try {
-      const movies = await recommend(searchQuery, controller.signal);
+      const excludeIds = excludePassedMovies && passedMovies.size > 0
+        ? Array.from(passedMovies)
+        : undefined;
+
+      const options: {
+        query: string;
+        exclude_tmdb_ids?: number[];
+        signal: AbortSignal;
+      } = {
+        query: searchQuery,
+        signal: controller.signal,
+      };
+
+      if (excludeIds) {
+        options.exclude_tmdb_ids = excludeIds;
+      }
+
+      const movies = await recommend(options);
       if (requestIdRef.current !== requestId) return;
       setResults(movies);
       addRecentMood(searchQuery);
@@ -104,6 +125,11 @@ function App() {
         setIsLoading(false);
       }
     }
+  }
+
+  function handleToggleExcludePassed(enabled: boolean) {
+    setExcludePassedMovies(enabled);
+    setExcludePassedPreference(enabled);
   }
 
   function handleMoreLikeThis(title: string, currentQuery: string) {
@@ -157,6 +183,9 @@ function App() {
           isLoading={isLoading}
           value={query}
           onChange={setQuery}
+          excludePassedMovies={excludePassedMovies}
+          onToggleExcludePassed={handleToggleExcludePassed}
+          hasPassedMovies={passedMovies.size > 0}
         />
       </section>
 

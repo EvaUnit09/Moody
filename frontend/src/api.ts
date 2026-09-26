@@ -31,14 +31,26 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
+export interface RecommendOptions {
+  query: string;
+  exclude_tmdb_ids?: number[];
+  signal?: AbortSignal;
+}
+
 export async function recommend(
-  query: string,
-  signal?: AbortSignal,
+  options: RecommendOptions,
 ): Promise<MovieRecommendation[]> {
+  const { query, exclude_tmdb_ids, signal } = options;
+  const body: { query: string; exclude_tmdb_ids?: number[] } = { query };
+  
+  if (exclude_tmdb_ids && exclude_tmdb_ids.length > 0) {
+    body.exclude_tmdb_ids = exclude_tmdb_ids;
+  }
+
   const data = await apiFetch<{ results: MovieRecommendation[] }>("/recommend", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify(body),
     signal,
   });
   return data.results;
