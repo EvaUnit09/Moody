@@ -86,7 +86,9 @@ async def recommend(body: RecommendRequest, request: Request) -> RecommendRespon
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     
-    cache_key = f"{query}:{region}"
+    # Build cache key including exclude list
+    exclude_ids = body.exclude_tmdb_ids or []
+    cache_key = cache.build_cache_key(f"{query}:{region}", exclude_ids if exclude_ids else None)
     
     cached = cache.get(cache_key)
     if cached is not None:
@@ -98,12 +100,21 @@ async def recommend(body: RecommendRequest, request: Request) -> RecommendRespon
     search_query = await expand_query(query)
     embedding = await embed_text(search_query)
     candidates = await search_similar(embedding, limit=CANDIDATE_LIMIT)
+    
+    # Filter out excluded tmdb_ids before reranking
+    if exclude_ids:
+        exclude_set = set(exclude_ids)
+        candidates = [c for c in candidates if c["tmdb_id"] not in exclude_set]
+        logger.debug(f"Filtered {len(exclude_ids)} excluded IDs, {len(candidates)} candidates remain")
+    
     results = await rerank(query, candidates)
     
     # Enrich results with watch providers (async batch with concurrency control)
     semaphore = asyncio.Semaphore(WatchProviderService.MAX_CONCURRENT_REQUESTS)
     enriched_results = await _enrich_with_providers(results, region, semaphore)
 
-    cache.store(cache_key, enriched_results)
+    # Store with appropriate TTL (popular moods get longer cache)
+    is_popular = cache._is_popular_mood(query)
+    cache.store(cache_key, enriched_results, is_popular=is_popular)
 
     return RecommendResponse(results=enriched_results)

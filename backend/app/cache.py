@@ -88,9 +88,27 @@ def _is_popular_mood(query: str) -> bool:
     return False
 
 
-def get(query: str) -> list[dict] | None:
+def build_cache_key(query: str, exclude_tmdb_ids: list[int] | None = None) -> str:
+    """Build cache key from query and optional exclude list.
+    
+    Normalizes query and includes sorted exclude_tmdb_ids to ensure
+    cache hits only when both query and excludes match.
+    """
     key = normalize_query(query)
-    entry = _cache.get(key)
+    if exclude_tmdb_ids:
+        # Sort to ensure [1,2,3] and [3,2,1] produce same key
+        exclude_str = ",".join(str(id) for id in sorted(exclude_tmdb_ids))
+        key = f"{key}:exclude:{exclude_str}"
+    return key
+
+
+def get(cache_key: str) -> list[dict] | None:
+    """Get cached results by cache key.
+    
+    Args:
+        cache_key: Pre-built cache key from build_cache_key() or normalize_query()
+    """
+    entry = _cache.get(cache_key)
     if entry is None:
         _cache_stats["misses"] += 1
         _log_cache_stats()
@@ -98,25 +116,30 @@ def get(query: str) -> list[dict] | None:
 
     expires_at, results = entry
     if time.monotonic() > expires_at:
-        del _cache[key]
+        del _cache[cache_key]
         _cache_stats["misses"] += 1
         _log_cache_stats()
         return None
 
     _cache_stats["hits"] += 1
     _log_cache_stats()
-    logger.debug(f"Cache hit for query={query!r}")
+    logger.debug(f"Cache hit for key={cache_key!r}")
     return results
 
 
-def store(query: str, results: list[dict]) -> None:
-    key = normalize_query(query)
+def store(cache_key: str, results: list[dict], is_popular: bool = False) -> None:
+    """Store results in cache by cache key.
     
+    Args:
+        cache_key: Pre-built cache key from build_cache_key() or normalize_query()
+        results: Results to cache
+        is_popular: Whether this is a popular mood query (longer TTL)
+    """
     # Use longer TTL for popular mood queries
-    ttl = POPULAR_CACHE_TTL_SECONDS if _is_popular_mood(query) else CACHE_TTL_SECONDS
+    ttl = POPULAR_CACHE_TTL_SECONDS if is_popular else CACHE_TTL_SECONDS
     
-    _cache[key] = (time.monotonic() + ttl, results)
-    logger.debug(f"Cache store: query={query!r} (normalized={key!r}) ttl={ttl}s popular={_is_popular_mood(query)}")
+    _cache[cache_key] = (time.monotonic() + ttl, results)
+    logger.debug(f"Cache store: key={cache_key!r} ttl={ttl}s popular={is_popular}")
 
 
 def _log_cache_stats() -> None:

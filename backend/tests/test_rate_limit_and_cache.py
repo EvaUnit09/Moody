@@ -61,15 +61,17 @@ class TestCacheNormalization:
         """Near-duplicate queries should hit the same cache entry."""
         results = [{"tmdb_id": 1, "title": "Test Movie"}]
         
-        cache.store("sci-fi action", results)
+        # Store with normalized key
+        key = cache.normalize_query("sci-fi action")
+        cache.store(key, results)
         
-        # These should all hit the same cache entry
-        assert cache.get("sci-fi action") == results
-        assert cache.get("Sci-Fi Action") == results
-        assert cache.get("  sci-fi action  ") == results
-        assert cache.get("sci-fi, action!") == results
+        # These should all hit the same cache entry (all normalize to same key)
+        assert cache.get(cache.normalize_query("sci-fi action")) == results
+        assert cache.get(cache.normalize_query("Sci-Fi Action")) == results
+        assert cache.get(cache.normalize_query("  sci-fi action  ")) == results
+        assert cache.get(cache.normalize_query("sci-fi, action!")) == results
         # Hyphen/space equivalence
-        assert cache.get("sci fi action") == results
+        assert cache.get(cache.normalize_query("sci fi action")) == results
         
         # Verify it's all cache hits
         assert cache._cache_stats["hits"] == 5
@@ -80,16 +82,18 @@ class TestCacheNormalization:
         results = [{"tmdb_id": 1, "title": "Test"}]
         
         # Miss
-        assert cache.get("query1") is None
+        key1 = cache.normalize_query("query1")
+        assert cache.get(key1) is None
         assert cache._cache_stats["misses"] == 1
         
         # Store and hit
-        cache.store("query1", results)
-        assert cache.get("query1") == results
+        cache.store(key1, results)
+        assert cache.get(key1) == results
         assert cache._cache_stats["hits"] == 1
         
         # Another miss
-        assert cache.get("query2") is None
+        key2 = cache.normalize_query("query2")
+        assert cache.get(key2) is None
         assert cache._cache_stats["misses"] == 2
         
         stats = cache.get_stats()
@@ -142,14 +146,14 @@ class TestPopularMoodTTL:
         """Popular mood queries should get longer TTL."""
         results = [{"tmdb_id": 1}]
         
-        # Store popular mood
-        cache.store("romantic comedy", results)
+        # Store popular mood with is_popular flag
         popular_key = cache.normalize_query("romantic comedy")
+        cache.store(popular_key, results, is_popular=True)
         popular_ttl = cache._cache[popular_key][0] - time.monotonic()
         
         # Store non-popular mood
-        cache.store("obscure indie experimental", results)
         regular_key = cache.normalize_query("obscure indie experimental")
+        cache.store(regular_key, results, is_popular=False)
         regular_ttl = cache._cache[regular_key][0] - time.monotonic()
         
         # Popular should have longer TTL

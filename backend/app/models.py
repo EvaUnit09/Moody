@@ -4,6 +4,10 @@ from pydantic import BaseModel, Field
 class RecommendRequest(BaseModel):
     query: str = Field(min_length=1, max_length=200)
     region: str | None = None
+    exclude_tmdb_ids: list[int] | None = Field(
+        default=None,
+        description="TMDB IDs to exclude from recommendations (e.g., previously passed/hidden titles)"
+    )
 
 
 class WatchProvider(BaseModel):
