@@ -19,7 +19,20 @@ except ImportError:
 RERANK_MODEL = "claude-haiku-4-5"
 TOP_N = 6
 
-client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=20.0)
+_client: AsyncAnthropic | None = None
+
+
+def _get_client() -> AsyncAnthropic:
+    """Lazy initialization of Anthropic client (only fails if reranking is actually used)."""
+    global _client
+    if _client is None:
+        if settings.anthropic_api_key is None:
+            raise ValueError(
+                "ANTHROPIC_API_KEY is required for reranking. "
+                "Set it in .env or environment variables."
+            )
+        _client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=20.0)
+    return _client
 
 RERANK_TOOL = {
     "name": "return_recommendations",
@@ -65,6 +78,7 @@ async def rerank(query: str, candidates: list[dict]) -> list[dict]:
     if not candidates:
         return []
 
+    client = _get_client()
     prompt = _build_prompt(query, candidates)
     
     # Build context string for LLMObs hallucination eval

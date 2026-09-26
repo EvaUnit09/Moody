@@ -5,7 +5,20 @@ from app.services.observability import DatadogObservability
 
 EXPANSION_MODEL = "claude-haiku-4-5"
 
-client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=20.0)
+_client: AsyncAnthropic | None = None
+
+
+def _get_client() -> AsyncAnthropic:
+    """Lazy initialization of Anthropic client (only fails if query expansion is actually used)."""
+    global _client
+    if _client is None:
+        if settings.anthropic_api_key is None:
+            raise ValueError(
+                "ANTHROPIC_API_KEY is required for query expansion. "
+                "Set it in .env or environment variables."
+            )
+        _client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=20.0)
+    return _client
 
 EXPAND_QUERY_TOOL = {
     "name": "expand_search_query",
@@ -51,6 +64,7 @@ def _build_prompt(query: str) -> str:
 @DatadogObservability.trace_query_expansion
 async def expand_query(query: str) -> str:
     """Rewrite short/ambiguous queries into intent-rich phrasing before embedding."""
+    client = _get_client()
     prompt = _build_prompt(query)
 
     with DatadogObservability.wrap_llm_call(
