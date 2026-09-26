@@ -1,12 +1,11 @@
 name: Ingest Popular Movies
 
 # Scheduled ingest of TMDB popular/trending movies.
-# Runs the backend ingest script to refresh the movies table with current
-# popularity rankings, enabling the /popular carousel to stay up-to-date
-# without hitting TMDB on every request.
+# Updates popularity metrics in the movies table to keep the /popular carousel
+# fresh, without overwriting enriched keywords or embeddings.
 #
 # Schedule: Every 12 hours (midnight and noon UTC)
-# Required secrets: TMDB_API_READ_TOKEN, OPENAI_API_KEY, SUPABASE_DB_URL
+# Required secrets: TMDB_API_READ_TOKEN, SUPABASE_DB_URL
 
 on:
   workflow_dispatch: # Manual trigger for testing
@@ -34,7 +33,6 @@ jobs:
       - name: Run ingest script
         env:
           API_READ_ACCESS_TOKEN: ${{ secrets.TMDB_API_READ_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: python -m app.scripts.ingest_popular
       

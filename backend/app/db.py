@@ -124,3 +124,53 @@ async def upsert_movies(movies: list[dict], embeddings: list[list[float]]) -> No
             batch = rows[i : i + UPSERT_BATCH_SIZE]
             await conn.executemany(_UPSERT_SQL, batch)
             print(f"Upserted {min(i + UPSERT_BATCH_SIZE, len(rows))}/{len(rows)} movies")
+
+
+_UPDATE_POPULARITY_SQL = """
+    update movies set
+        popularity = $2,
+        vote_average = $3,
+        vote_count = $4,
+        title = $5,
+        poster_path = $6,
+        backdrop_path = $7,
+        release_date = $8,
+        genre_ids = $9
+    where tmdb_id = $1
+"""
+
+
+async def update_popularity(movies: list[dict]) -> int:
+    """
+    Update popularity metrics only, preserving keywords and embeddings.
+    
+    Used by scheduled ingest to refresh popularity rankings without
+    overwriting enriched keywords or regenerating embeddings.
+    
+    Returns count of movies updated.
+    """
+    pool = await get_pool()
+    rows = [
+        (
+            movie["id"],
+            movie.get("popularity"),
+            movie.get("vote_average"),
+            movie.get("vote_count"),
+            movie["title"],
+            movie.get("poster_path"),
+            movie.get("backdrop_path"),
+            datetime.date.fromisoformat(movie["release_date"]),
+            movie.get("genre_ids", []),
+        )
+        for movie in movies
+    ]
+    
+    updated = 0
+    async with pool.acquire() as conn:
+        for i in range(0, len(rows), UPSERT_BATCH_SIZE):
+            batch = rows[i : i + UPSERT_BATCH_SIZE]
+            result = await conn.executemany(_UPDATE_POPULARITY_SQL, batch)
+            updated += len(batch)
+            print(f"Updated popularity for {min(i + UPSERT_BATCH_SIZE, len(rows))}/{len(rows)} movies")
+    
+    return updated

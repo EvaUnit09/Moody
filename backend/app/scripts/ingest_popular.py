@@ -2,22 +2,21 @@
 """
 Ingest TMDB popular and trending movies into Supabase.
 
-Fetches current popular and trending movies from TMDB, generates embeddings,
-and upserts them into the movies table. Also busts the in-memory popular cache
-so the /popular endpoint reflects updated popularity rankings.
+Fetches current popular and trending movies from TMDB and updates their
+popularity metrics in the movies table. Preserves enriched keywords and
+embeddings. Notifies Railway to bust the __popular__ cache.
 
 Usage:
     python -m app.scripts.ingest_popular
 
 Environment variables (from .env):
     - API_READ_ACCESS_TOKEN: TMDB API read access token
-    - OPENAI_API_KEY: OpenAI API key for embeddings
     - SUPABASE_DB_URL: Postgres connection string
 
 Exit codes:
-    0: Success (movies ingested and cache busted)
+    0: Success (popularity updated)
     1: TMDB API error (keep existing shelf, no DB changes)
-    2: Database or embedding error (partial failure)
+    2: Database error (partial failure)
 """
 
 import asyncio
@@ -25,23 +24,13 @@ import sys
 
 import httpx
 
-from app import cache
-from app.db import get_pool, upsert_movies
-from app.routers.popular import POPULAR_CACHE_KEY
-from app.services.embeddings import embed_batch
+from app.db import get_pool, update_popularity
 from app.services.tmdb import BASE_URL, HEADERS, MIN_VOTE_AVERAGE
 
 # Fetch top N pages from each endpoint to capture ~100-200 movies total
 POPULAR_PAGES = 3
 TRENDING_PAGES = 2
 REQUEST_TIMEOUT = 15.0
-
-
-def _build_movie_text(movie: dict) -> str:
-    """Build searchable text for embedding (same format as main corpus)."""
-    title = movie.get("title", "")
-    overview = movie.get("overview", "")
-    return f"{title}\n\n{overview}"
 
 
 async def fetch_popular_movies() -> list[dict]:
@@ -119,7 +108,7 @@ async def ingest_popular() -> int:
     Main ingest routine.
     
     Returns:
-        0 on success, 1 on TMDB error, 2 on DB/embedding error
+        0 on success, 1 on TMDB error, 2 on DB error
     """
     print("=== Starting popular/trending ingest ===")
     
@@ -143,36 +132,17 @@ async def ingest_popular() -> int:
         print("No movies to ingest after filtering")
         return 0
     
-    # Step 3: Generate embeddings
-    try:
-        texts = [_build_movie_text(m) for m in movies]
-        print(f"Generating embeddings for {len(texts)} movies...")
-        embeddings = await embed_batch(texts)
-    except Exception as e:
-        print(f"Embedding generation failed: {e}")
-        return 2
-    
-    # Step 4: Upsert to database
+    # Step 3: Update popularity in database (preserves keywords and embeddings)
     try:
         await get_pool()  # Ensure pool is initialized
-        await upsert_movies(movies, embeddings)
-        print(f"Successfully upserted {len(movies)} movies")
+        updated = await update_popularity(movies)
+        print(f"Successfully updated popularity for {updated} movies")
     except Exception as e:
-        print(f"Database upsert failed: {e}")
+        print(f"Database update failed: {e}")
         return 2
     
-    # Step 5: Bust the popular cache
-    try:
-        # Clear the in-memory cache entry so next /popular request fetches fresh data
-        if POPULAR_CACHE_KEY in cache._cache:
-            del cache._cache[POPULAR_CACHE_KEY]
-            print("Busted __popular__ cache")
-        else:
-            print("No cached __popular__ entry to bust")
-    except Exception as e:
-        print(f"Cache bust warning (non-fatal): {e}")
-    
     print("=== Ingest complete ===")
+    print("Note: Railway app cache will refresh on next /popular request or periodic warm cycle")
     return 0
 
 
