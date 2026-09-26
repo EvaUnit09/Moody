@@ -11,18 +11,31 @@ genre/year dropdowns.
 ## How it works
 
 1. ~30k movies (title, overview, genres, keywords) are embedded and stored in
-   Postgres via pgvector.
-2. A user's natural-language query (e.g. "something slow and melancholic")
-   is expanded by an LLM (Haiku) if it's short/ambiguous, then embedded with text-embedding-3-small.
-3. Vector search pulls the top candidates by cosine similarity.
-4. An LLM reranks the candidates down to a shortlist and writes a one-line
-   reason for each pick, grounded in the movie's overview.
+   Postgres as `halfvec(1536)` via pgvector.
+2. Every query is sent to Claude Haiku for expansion. Short or ambiguous text
+   is rewritten into a mood description; an already-clear request is returned
+   unchanged. That expanded text is embedded with `text-embedding-3-small`.
+   The original wording is what the reranker judges.
+3. Vector search returns the top 40 candidates with `vote_average >= 5.0`.
+   Hidden titles (`exclude_tmdb_ids`, at most 100) are removed from that
+   list before rerank. The web client sends its local passed list when
+   "don't show hidden" is on.
+4. Haiku reranks that pool to at most 6 picks and writes a one-line reason
+   for each, grounded in the movie's overview. Watch-provider links for the
+   `US` region are attached before the response is cached.
+
+The home screen carousel is a separate `GET /popular` read of the
+`popularity` column, refreshed by the ingest job in
+[docs/INGEST_POPULAR.md](docs/INGEST_POPULAR.md).
 
 Raw vector similarity alone gives "in the neighborhood" results, not good
-judgment — the rerank step is what turns it into a curated shortlist. See
-[docs/architecture.md](docs/architecture.md) for the full stack-decision
-rationale (why pgvector, why Claude Haiku, cost estimates, etc.) and
-[docs/plan/backend-buildout.md](docs/plan/backend-buildout.md) for the
+judgment — the rerank step is what turns it into a curated shortlist. Request
+and response details, cache TTLs, and the exclude-list limit are in
+[backend/README.md](backend/README.md). Browser-only state (hidden titles,
+watchlist, recent moods, `?q=` links) is in
+[frontend/README.md](frontend/README.md). See
+[docs/architecture.md](docs/architecture.md) for the stack-decision rationale
+and [docs/plan/backend-buildout.md](docs/plan/backend-buildout.md) for the
 original implementation plan.
 
 ## Tech stack

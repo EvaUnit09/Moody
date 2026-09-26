@@ -10,7 +10,10 @@ The `/popular` endpoint serves movies ordered by the `popularity` column in the 
 2. Updates `popularity`, `vote_average`, `vote_count`, and metadata in the `movies` table
 3. **Preserves enriched keywords and embeddings** (does not overwrite them)
 
-The Railway app's in-memory `__popular__` cache automatically refreshes on the next `/popular` request or periodic warm cycle (every 55 minutes) after the database is updated.
+The Railway app keeps `/popular` in an in-memory `__popular__` entry. A warm
+loop reloads it every 3300 seconds (55 minutes), and the process also warms
+it on startup. A request serves the cached list until that entry expires or
+the warm loop replaces it. See [Cache behavior](#cache-behavior-important).
 
 ## Active Schedule
 
@@ -67,7 +70,7 @@ If database update fails (exit 2), the shelf may be partially updated. Check Git
 - **User impact:** `/popular` endpoint rankings refresh to reflect current TMDB popularity
 - **What's preserved:** Enriched keywords and embeddings are NOT overwritten (popularity-only UPDATE)
 - **Rollback:** Popularity values are overwritten on each run; no manual rollback needed
-- **Cache:** Railway app cache refreshes automatically on next `/popular` request or warm cycle (~55min)
+- **Cache:** Railway serves the previous `__popular__` entry until the 55-minute warm loop or the 1-hour TTL. The next HTTP request alone does not reload the shelf while the entry is still valid.
 
 ## Running the script
 
@@ -107,7 +110,7 @@ Railway environment variables should already include the required keys.
 
 ## Exit Codes & Monitoring
 
-- **0**: Success (popularity updated, `/popular` will show updated rankings on next request)
+- **0**: Success (popularity rows written). The carousel still serves the previous in-memory list until the warm loop or TTL described below.
 - **1**: TMDB API error (existing shelf unchanged, **safe failure**)
 - **2**: Database update error (partial failure, check logs)
 
@@ -117,21 +120,27 @@ Monitor via GitHub Actions logs. Exit code 1 is expected occasionally (TMDB rate
 
 **Key limitation:** GitHub Actions runs in a separate process from Railway. Any cache bust in this script is **process-local and does NOT affect Railway's cache.**
 
-The Railway app maintains an in-memory `__popular__` cache with a 2-hour TTL. After a successful ingest:
+`GET /popular` calls `cache.store("__popular__", movies)` with the default TTL, which is `CACHE_TTL_SECONDS` (3600). The 2-hour TTL (`POPULAR_CACHE_TTL_SECONDS`) applies only to `/recommend` queries that match a popular-mood keyword. It does not apply to the carousel.
 
-1. ✅ Database `popularity` column is updated
-2. ❌ Railway app cache is NOT busted (process separation)
-3. ✅ Cache refreshes automatically via:
-   - **Periodic warm cycle** every 55 minutes in Railway app
-   - **Next `/popular` request** after TTL expires (2 hours)
+After a successful ingest:
 
-**Freshness:** Updated popularity rankings appear in `/popular` within **~55 minutes to 2 hours** after ingest (server cache TTL), **not immediately**.
+1. The `popularity` column in Postgres is updated.
+2. Railway's in-memory cache is left as-is. GitHub Actions cannot clear it.
+3. The carousel picks up the new ranking when either of these happens:
+   - The background warm loop in `main.py` runs (`POPULAR_CACHE_REFRESH_SECONDS` = 3300). It reloads from Postgres whether or not the TTL has elapsed.
+   - The `__popular__` entry expires (1 hour) and the next `GET /popular` misses, which calls `warm_popular_cache()`.
+   - The Railway process restarts, which warms the cache during lifespan startup.
 
-**Why:** GitHub Actions and Railway run in separate processes. A shared cache store (Redis) would enable cross-process invalidation but is not currently implemented.
+**Freshness:** With a healthy warm loop, updated rankings show up on the next cycle, at most about 55 minutes after ingest. If the warm loop is not running, the previous list can be served until the 1-hour TTL.
+
+The browser also keeps `movierec:popular-cache` for first paint (10 minutes). `App` still requests `/popular` on load, so that local copy is replaced as soon as the server responds.
+
+**Why the gap exists:** GitHub Actions and Railway are separate processes. A shared cache store (Redis) would allow the ingest job to invalidate `__popular__` immediately. That store is not in the stack.
 
 ## Notes
 
-- Fetches ~100-200 movies total (3 pages popular + 2 pages trending)
+- Fetches 3 pages of `/movie/popular` and 2 pages of weekly `/trending/movie/week` (~100–200 titles before filtering)
+- Writes with `UPDATE ... WHERE tmdb_id = $1`. A title that was never embedded is left out of the catalog. The script's "updated" count is the number of statements sent, including ids that matched no row.
 - Only movies with `vote_average >= 5.0` are updated
 - Duplicates across popular/trending are deduplicated by TMDB ID
 - **Preserves enriched keywords and embeddings** (popularity-only UPDATE, not full upsert)

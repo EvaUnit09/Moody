@@ -20,8 +20,8 @@ Exit codes:
 
 Note:
     This script runs in GitHub Actions and cannot bust Railway's in-memory cache.
-    Railway's __popular__ cache refreshes automatically within 1-2h via TTL or
-    the periodic warm cycle (~55 minutes).
+    Railway's __popular__ entry uses a 1-hour TTL and a warm loop every
+    3300 seconds. The 2-hour TTL is only for popular-mood /recommend queries.
 """
 
 import asyncio
@@ -148,7 +148,7 @@ async def ingest_popular() -> int:
     
     print("=== Ingest complete ===")
     print("Note: GitHub Actions cannot bust Railway's cache (process-local).")
-    print("Railway cache will refresh automatically within 1-2h (warm cycle ~55min or TTL).")
+    print("Railway __popular__ cache refreshes on its 55min warm loop or after the 1h TTL.")
     return 0
 
 
