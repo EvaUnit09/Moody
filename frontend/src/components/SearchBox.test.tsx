@@ -97,4 +97,79 @@ describe("SearchBox", () => {
     rerender(<SearchBox onSearch={() => {}} isLoading={false} value="external value" />);
     expect(screen.getByRole("textbox")).toHaveValue("external value");
   });
+
+  test("shows exclude toggle when hasPassedMovies is true", () => {
+    render(
+      <SearchBox 
+        onSearch={() => {}} 
+        isLoading={false}
+        hasPassedMovies={true}
+        excludePassedMovies={true}
+        onToggleExcludePassed={() => {}}
+      />
+    );
+
+    expect(screen.getByLabelText(/don.t show hidden/i)).toBeInTheDocument();
+  });
+
+  test("does not show exclude toggle when hasPassedMovies is false", () => {
+    render(
+      <SearchBox 
+        onSearch={() => {}} 
+        isLoading={false}
+        hasPassedMovies={false}
+        excludePassedMovies={true}
+        onToggleExcludePassed={() => {}}
+      />
+    );
+
+    expect(screen.queryByLabelText(/don.t show hidden/i)).not.toBeInTheDocument();
+  });
+
+  test("calls onToggleExcludePassed when checkbox is clicked", async () => {
+    const user = userEvent.setup();
+    const onToggleExcludePassed = vi.fn();
+    
+    render(
+      <SearchBox 
+        onSearch={() => {}} 
+        isLoading={false}
+        hasPassedMovies={true}
+        excludePassedMovies={true}
+        onToggleExcludePassed={onToggleExcludePassed}
+      />
+    );
+
+    const checkbox = screen.getByLabelText(/don.t show hidden/i);
+    expect(checkbox).toBeChecked();
+
+    await user.click(checkbox);
+    expect(onToggleExcludePassed).toHaveBeenCalledWith(false);
+  });
+
+  test("toggle reflects excludePassedMovies prop state", () => {
+    const { rerender } = render(
+      <SearchBox 
+        onSearch={() => {}} 
+        isLoading={false}
+        hasPassedMovies={true}
+        excludePassedMovies={true}
+        onToggleExcludePassed={() => {}}
+      />
+    );
+
+    expect(screen.getByLabelText(/don.t show hidden/i)).toBeChecked();
+
+    rerender(
+      <SearchBox 
+        onSearch={() => {}} 
+        isLoading={false}
+        hasPassedMovies={true}
+        excludePassedMovies={false}
+        onToggleExcludePassed={() => {}}
+      />
+    );
+
+    expect(screen.getByLabelText(/don.t show hidden/i)).not.toBeChecked();
+  });
 });

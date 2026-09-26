@@ -119,7 +119,12 @@ describe("App mood chip and recovery integration", () => {
       expect(screen.getByRole("textbox")).toHaveValue("date night");
     });
 
-    expect(recommendMock).toHaveBeenCalledWith("date night", expect.any(AbortSignal));
+    expect(recommendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "date night",
+        signal: expect.any(AbortSignal),
+      })
+    );
     
     await waitFor(() => {
       expect(screen.getByText("Recommended Movie")).toBeInTheDocument();
@@ -198,7 +203,12 @@ describe("App mood chip and recovery integration", () => {
       expect(screen.getByRole("textbox")).toHaveValue("feel-good comfort");
     });
 
-    expect(recommendMock).toHaveBeenCalledWith("feel-good comfort", expect.any(AbortSignal));
+    expect(recommendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "feel-good comfort",
+        signal: expect.any(AbortSignal),
+      })
+    );
     
     await waitFor(() => {
       expect(screen.getByText("Recommended Movie")).toBeInTheDocument();
@@ -251,8 +261,10 @@ describe("More like this functionality", () => {
 
     await waitFor(() => {
       expect(recommendMock).toHaveBeenCalledWith(
-        'movies like Recommended Movie, same vibe as "dark and moody"',
-        expect.any(AbortSignal)
+        expect.objectContaining({
+          query: 'movies like Recommended Movie, same vibe as "dark and moody"',
+          signal: expect.any(AbortSignal),
+        })
       );
     });
 
@@ -289,7 +301,146 @@ describe("More like this functionality", () => {
     await user.click(moreLikeThisButton);
 
     await waitFor(() => {
-      expect(window.location.search).toBe("?q=movies%20like%20Recommended%20Movie%2C%20same%20vibe%20as%20%22test%20query%22");
+    expect(window.location.search).toBe("?q=movies%20like%20Recommended%20Movie%2C%20same%20vibe%20as%20%22test%20query%22");
+  });
+});
+
+describe("Exclude passed movies functionality", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    readPopularCacheMock.mockReturnValue([CACHED_MOVIE]);
+    getPopularMock.mockResolvedValue([CACHED_MOVIE]);
+    window.history.replaceState(null, "", "/");
+  });
+
+  test("sends exclude_tmdb_ids when toggle is on and there are passed movies", async () => {
+    const user = userEvent.setup();
+    recommendMock.mockResolvedValue([RECOMMENDED_MOVIE]);
+
+    localStorage.setItem("moody-passed", JSON.stringify([123, 456, 789]));
+    localStorage.setItem("moody-exclude-passed", "true");
+
+    render(
+      <TestWrapper>
+        <App />
+      </TestWrapper>
+    );
+
+    await user.type(screen.getByRole("textbox"), "test query");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(recommendMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: "test query",
+          exclude_tmdb_ids: expect.arrayContaining([123, 456, 789]),
+          signal: expect.any(AbortSignal),
+        })
+      );
     });
   });
+
+  test("does not send exclude_tmdb_ids when toggle is off", async () => {
+    const user = userEvent.setup();
+    recommendMock.mockResolvedValue([RECOMMENDED_MOVIE]);
+
+    localStorage.setItem("moody-passed", JSON.stringify([123, 456]));
+    localStorage.setItem("moody-exclude-passed", "false");
+
+    render(
+      <TestWrapper>
+        <App />
+      </TestWrapper>
+    );
+
+    await user.type(screen.getByRole("textbox"), "test query");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(recommendMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: "test query",
+          signal: expect.any(AbortSignal),
+        })
+      );
+    });
+
+    const lastCall = recommendMock.mock.calls[recommendMock.mock.calls.length - 1][0];
+    expect(lastCall).not.toHaveProperty("exclude_tmdb_ids");
+  });
+
+  test("does not send exclude_tmdb_ids when no movies are passed", async () => {
+    const user = userEvent.setup();
+    recommendMock.mockResolvedValue([RECOMMENDED_MOVIE]);
+
+    localStorage.setItem("moody-exclude-passed", "true");
+
+    render(
+      <TestWrapper>
+        <App />
+      </TestWrapper>
+    );
+
+    await user.type(screen.getByRole("textbox"), "test query");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(recommendMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: "test query",
+          signal: expect.any(AbortSignal),
+        })
+      );
+    });
+
+    const lastCall = recommendMock.mock.calls[recommendMock.mock.calls.length - 1][0];
+    expect(lastCall).not.toHaveProperty("exclude_tmdb_ids");
+  });
+
+  test("shows exclude toggle only when there are passed movies", async () => {
+    localStorage.setItem("moody-passed", JSON.stringify([123]));
+
+    render(
+      <TestWrapper>
+        <App />
+      </TestWrapper>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/don.t show hidden/i)).toBeInTheDocument();
+    });
+  });
+
+  test("does not show exclude toggle when there are no passed movies", () => {
+    render(
+      <TestWrapper>
+        <App />
+      </TestWrapper>
+    );
+
+    expect(screen.queryByLabelText(/don.t show hidden/i)).not.toBeInTheDocument();
+  });
+
+  test("persists toggle state in localStorage", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("moody-passed", JSON.stringify([123]));
+    localStorage.setItem("moody-exclude-passed", "true");
+
+    render(
+      <TestWrapper>
+        <App />
+      </TestWrapper>
+    );
+
+    const checkbox = await screen.findByLabelText(/don.t show hidden/i);
+    expect(checkbox).toBeChecked();
+
+    await user.click(checkbox);
+    expect(localStorage.getItem("moody-exclude-passed")).toBe("false");
+
+    await user.click(checkbox);
+    expect(localStorage.getItem("moody-exclude-passed")).toBe("true");
+  });
+});
 });

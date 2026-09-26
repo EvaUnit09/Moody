@@ -14,9 +14,20 @@ interface SearchBoxProps {
   isLoading: boolean;
   value?: string;
   onChange?: (value: string) => void;
+  excludePassedMovies?: boolean;
+  onToggleExcludePassed?: (enabled: boolean) => void;
+  hasPassedMovies?: boolean;
 }
 
-export function SearchBox({ onSearch, isLoading, value, onChange }: SearchBoxProps) {
+export function SearchBox({ 
+  onSearch, 
+  isLoading, 
+  value, 
+  onChange,
+  excludePassedMovies = true,
+  onToggleExcludePassed,
+  hasPassedMovies = false,
+}: SearchBoxProps) {
   const [internalQuery, setInternalQuery] = useState("");
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   
@@ -60,9 +71,39 @@ export function SearchBox({ onSearch, isLoading, value, onChange }: SearchBoxPro
       />
 
       <div className="search-box-row">
-        <span className="text-muted search-box-hint">
-          describe how you want to feel, in your own words
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-6)" }}>
+          <span className="text-muted search-box-hint">
+            describe how you want to feel, in your own words
+          </span>
+          {hasPassedMovies && onToggleExcludePassed && (
+            <label 
+              htmlFor="exclude-passed-checkbox"
+              style={{ 
+                fontSize: "12px", 
+                color: "var(--color-neutral-300)",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                id="exclude-passed-checkbox"
+                type="checkbox"
+                checked={excludePassedMovies}
+                onChange={(e) => onToggleExcludePassed(e.target.checked)}
+                style={{ 
+                  width: "16px",
+                  height: "16px",
+                  margin: 0,
+                  cursor: "pointer",
+                  accentColor: "var(--color-accent)",
+                }}
+              />
+              <span style={{ whiteSpace: "nowrap" }}>don&rsquo;t show hidden</span>
+            </label>
+          )}
+        </div>
         <button
           type="submit"
           className="btn btn-primary"
