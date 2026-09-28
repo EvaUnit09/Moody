@@ -63,9 +63,11 @@ Embeddings are stored as `halfvec(1536)` with an HNSW index
 ## Observability plan
 
 - `ddtrace-run` wraps the FastAPI app for APM
-- Custom spans around: embedding call, vector search, Haiku rerank call
-- Datadog LLM Observability tracks token counts, cost per request, and latency
-on the Haiku call specifically
+- Custom spans around: query expansion, embedding call, vector search, Haiku rerank
+- Datadog LLM Observability tracks token counts and latency on both Haiku
+calls (expansion and rerank). The rerank span also sends separate query and
+context variables for the hallucination eval. See
+[datadog-setup.md](datadog-setup.md).
 - Dashboard: requests/min, p50/p95 latency, error rate, cost per day
 - Tracing scoped to `/recommend` only — not static assets or health checks,
 both for free-tier limits and signal-to-noise
@@ -93,6 +95,7 @@ Moody/
         eval.py
       scripts/
         fetch_movies.py
+        fetch_keywords.py
         build_embeddings.py
         ingest_popular.py
         create_index.py
@@ -117,8 +120,8 @@ poster path), dump to JSON. Runs once, not called live from the app.
 2. Embed + load — build a text blob per movie, embed with
 text-embedding-3-small, insert into Supabase. Search now reads
 `embedding_half halfvec(1536)` (see `sql/schema.sql`); the original plan
-called for a `vector(1536)` column.
-Standalone script.
+called for a `vector(1536)` column. Quotas, the blob format, and how a full
+upsert differs from the popularity `UPDATE` are in [catalog.md](catalog.md).
 3. Test retrieval — throwaway script embedding a test query and running
 cosine similarity against the table, to confirm data quality before
 building anything on top of it.

@@ -48,9 +48,10 @@ The implementation follows the observability plan outlined in `architecture.md`:
    - LLM Observability integration for token/cost tracking
 
 2. **Instrumented Services**:
+   - `app/services/query_intent.py`: Traces Claude Haiku query expansion (`llm.query_expansion`) and wraps that call in LLM Observability
    - `app/services/embeddings.py`: Traces OpenAI embedding calls
    - `app/db.py`: Traces Supabase pgvector similarity searches
-   - `app/services/rerank.py`: Traces Claude Haiku reranking with LLM Observability
+   - `app/services/rerank.py`: Traces Claude Haiku reranking with LLM Observability, including a prompt annotation that separates the user query from the candidate context
 
 3. **Configuration**:
    - `app/config.py`: Datadog-specific settings (API key, service name, environment)
@@ -86,6 +87,8 @@ DD_API_KEY=your_datadog_api_key_here   # Required when DD_TRACE_ENABLED=true for
 DD_SERVICE=movie-rec-backend           # Service name in Datadog (default shown)
 DD_ENV=dev                             # Environment: dev, staging, production (default: dev)
 DD_VERSION=1.0.0                       # Optional: version tag for this deployment
+DD_SITE=datadoghq.com                  # LLM Observability site (default shown)
+DD_LLMOBS_ML_APP=                      # Optional ML app name; falls back to DD_SERVICE
 DD_TRACE_AGENT_URL=                    # Optional: custom agent URL (advanced use only)
 ```
 
@@ -130,26 +133,32 @@ uvicorn app.main:app --reload
 
 ### Custom Spans
 
-Three custom spans are automatically added to the `/recommend` endpoint:
+Four custom spans are automatically added to the `/recommend` endpoint:
 
-1. **`embedding.generate`**
+1. **`llm.query_expansion`**
+   - Resource: `anthropic.claude-haiku-4-5`
+   - Tags: provider, model, operation, original query length, expanded query length
+   - LLM Observability: input/output messages and token counts (`operation_name` `query_expansion`). No prompt annotation.
+
+2. **`embedding.generate`**
    - Resource: `openai.text-embedding-3-small`
    - Tags: model, provider, input length, embedding dimension
+   - Decorates `embed_text` only. The catalog script's `embed_batch` is not spanned.
 
-2. **`vector_search.similarity`**
+3. **`vector_search.similarity`**
    - Resource: `supabase.pgvector`
    - Tags: provider, index type (HNSW), similarity metric (cosine), limit, result count
 
-3. **`llm.rerank`**
+4. **`llm.rerank`**
    - Resource: `anthropic.claude-haiku-4-5`
    - Tags: provider, model, operation, query length, candidate count, output count
-   - LLM Observability: input/output tokens, cost estimate
+   - LLM Observability: input/output messages, token counts, and a `Prompt` with `rag_query_variables=["query"]` and `rag_context_variables=["context"]` for the hallucination eval. The prompt import is skipped when that `ddtrace` type is unavailable; the rerank still runs.
 
 ### Trace Filtering
 
 Per the architecture plan, observability is scoped to **`/recommend` requests only**. Health checks (`/health`) and static assets do not generate observability data.
 
-**Important**: The `TraceFilter` that filters by endpoint is only active in **agent-based APM mode** (advanced/local development). In the recommended **agentless LLM Observability mode** (production), the tracer is disabled (`enabled=False`), so the TraceFilter is not used. Instead, LLM Observability naturally captures only `/recommend` because that's the only endpoint that calls `wrap_llm_call()`.
+**Important**: `RecommendOnlyFilter` is registered in both modes. In the recommended **agentless LLM Observability mode** (production), startup calls `tracer.configure(apm_tracing_disabled=True)`, so those APM spans are not flushed to an agent. LLM Observability still records the two Haiku calls, and both of those live on `/recommend` (`expand_query` and `rerank`). `GET /popular` and `GET /health` do not call `wrap_llm_call()`.
 
 ## Running the Evaluation Harness
 
@@ -243,7 +252,11 @@ Once tracing is active, the following metrics are available in Datadog:
 - **Error rate**: Percentage of requests returning 4xx/5xx
 
 ### Custom Span Metrics
-- **Embedding latency**: Time spent in OpenAI embedding calls
+
+These come from `tracer.trace` and are APM spans. Agentless mode sets `apm_tracing_disabled=True`, so they are not flushed. They show up when an agent is receiving traces. In agentless mode, use LLM Observability for the two Haiku calls instead.
+
+- **Query expansion latency**: Time spent rewriting the query with Haiku
+- **Embedding latency**: Time spent in OpenAI embedding calls (`embed_text`)
 - **Vector search latency**: Time spent in pgvector similarity search
 - **LLM rerank latency**: Time spent in Claude Haiku reranking
 
