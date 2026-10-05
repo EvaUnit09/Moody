@@ -92,8 +92,8 @@ class TestWatchProviderService:
         }
         mock_response.raise_for_status = MagicMock()
         
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
+        with patch("app.services.tmdb._get_http_client") as mock_client:
+            mock_client.return_value.get = AsyncMock(return_value=mock_response)
             
             # Clear cache before test
             if hasattr(WatchProviderService, '_cache'):
@@ -115,8 +115,8 @@ class TestWatchProviderService:
         }
         mock_response.raise_for_status = MagicMock()
         
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
+        with patch("app.services.tmdb._get_http_client") as mock_client:
+            mock_client.return_value.get = AsyncMock(return_value=mock_response)
             
             if hasattr(WatchProviderService, '_cache'):
                 WatchProviderService._cache.clear()
@@ -144,8 +144,8 @@ class TestWatchProviderService:
         }
         mock_response.raise_for_status = MagicMock()
         
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
+        with patch("app.services.tmdb._get_http_client") as mock_client:
+            mock_client.return_value.get = AsyncMock(return_value=mock_response)
             
             if hasattr(WatchProviderService, '_cache'):
                 WatchProviderService._cache.clear()
@@ -157,8 +157,8 @@ class TestWatchProviderService:
     @pytest.mark.asyncio
     async def test_fetch_providers_network_error_not_cached(self):
         """Test network errors return empty list and are not cached."""
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+        with patch("app.services.tmdb._get_http_client") as mock_client:
+            mock_client.return_value.get = AsyncMock(
                 side_effect=Exception("Network error")
             )
             
@@ -193,8 +193,8 @@ class TestWatchProviderService:
         }
         mock_response.raise_for_status = MagicMock()
         
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
+        with patch("app.services.tmdb._get_http_client") as mock_client:
+            mock_client.return_value.get = AsyncMock(return_value=mock_response)
             
             if hasattr(WatchProviderService, '_cache'):
                 WatchProviderService._cache.clear()
@@ -220,8 +220,8 @@ class TestWatchProviderService:
         }
         mock_response.raise_for_status = MagicMock()
         
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
+        with patch("app.services.tmdb._get_http_client") as mock_client:
+            mock_client.return_value.get = AsyncMock(return_value=mock_response)
             
             if hasattr(WatchProviderService, '_cache'):
                 WatchProviderService._cache.clear()
@@ -230,3 +230,34 @@ class TestWatchProviderService:
             
             assert len(result) == 1
             assert result[0]["name"] == "iTunes"
+
+
+class TestSharedHttpClient:
+    """The TMDB client is pooled and reused across provider lookups."""
+
+    @pytest.fixture(autouse=True)
+    def fresh_client(self, monkeypatch):
+        # Other tests may leave a client bound to an already-closed event loop.
+        monkeypatch.setattr("app.services.tmdb._http_client", None)
+
+    @pytest.mark.asyncio
+    async def test_get_http_client_reuses_instance(self):
+        from app.services.tmdb import _get_http_client, close_http_client
+
+        first = _get_http_client()
+        second = _get_http_client()
+
+        assert first is second
+        await close_http_client()
+
+    @pytest.mark.asyncio
+    async def test_close_http_client_creates_fresh_client_next_time(self):
+        from app.services.tmdb import _get_http_client, close_http_client
+
+        first = _get_http_client()
+        await close_http_client()
+        second = _get_http_client()
+
+        assert first.is_closed
+        assert second is not first
+        await close_http_client()

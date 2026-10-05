@@ -83,3 +83,60 @@ class TestExpandQuery:
             call_kwargs = mock_client.messages.create.call_args.kwargs
             prompt = call_kwargs["messages"][0]["content"]
             assert "Fall" in prompt
+
+
+class TestShouldExpandGate:
+    """expand_query skips the model entirely when should_expand says no."""
+
+    @pytest.mark.asyncio
+    async def test_skips_model_when_should_expand_false(self):
+        mock_client = AsyncMock()
+
+        with patch("app.services.query_intent.should_expand", return_value=False), \
+             patch("app.services.query_intent._get_client", return_value=mock_client):
+            result = await expand_query("a slow-burn psychological thriller set in a snowy small town")
+
+        assert result == "a slow-burn psychological thriller set in a snowy small town"
+        mock_client.messages.create.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_calls_model_when_should_expand_true(self):
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(return_value=_mock_message("autumn cozy movies"))
+
+        with patch("app.services.query_intent.should_expand", return_value=True), \
+             patch("app.services.query_intent._get_client", return_value=mock_client):
+            result = await expand_query("Fall")
+
+        assert result == "autumn cozy movies"
+        mock_client.messages.create.assert_called_once()
+
+
+class TestShouldExpand:
+    """Word-count heuristic deciding whether a query needs expansion."""
+
+    @pytest.mark.parametrize(
+        ("query", "expected"),
+        [
+            ("Fall", True),
+            ("date night", True),
+            ("sci-fi", True),
+            ("  Fall!!  ", True),
+            ("cozy rainy day", False),
+            ("a slow-burn thriller in a snowy town", False),
+        ],
+    )
+    def test_should_expand(self, query, expected):
+        from app.services.query_intent import should_expand
+
+        assert should_expand(query) is expected
+
+    @pytest.mark.asyncio
+    async def test_descriptive_query_skips_model_end_to_end(self):
+        mock_client = AsyncMock()
+
+        with patch("app.services.query_intent._get_client", return_value=mock_client):
+            result = await expand_query("cozy rainy day")
+
+        assert result == "cozy rainy day"
+        mock_client.messages.create.assert_not_called()

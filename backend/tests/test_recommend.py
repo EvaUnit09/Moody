@@ -5,6 +5,8 @@ Unit tests for recommend endpoint watch provider enrichment and exclude filterin
 import pytest
 from unittest.mock import AsyncMock, patch
 
+from fastapi import Response
+
 from app.routers.recommend import _enrich_with_providers
 from app.services.tmdb import WatchProviderService
 from app import cache
@@ -171,7 +173,7 @@ class TestExcludeFiltering:
                             ]
                             mock_enrich.return_value = mock_rerank.return_value
                             
-                            response = await recommend(body, request)
+                            response = await recommend(body, request, Response())
                             
                             # Verify rerank received filtered candidates (excluded IDs removed)
                             rerank_call_args = mock_rerank.call_args
@@ -215,7 +217,7 @@ class TestExcludeFiltering:
                             mock_rerank.return_value = [{**candidates[0], "reason": "Great"}]
                             mock_enrich.return_value = mock_rerank.return_value
                             
-                            response = await recommend(body, request)
+                            response = await recommend(body, request, Response())
                             
                             # Should pass all candidates to rerank (no filtering)
                             rerank_call_args = mock_rerank.call_args
@@ -250,7 +252,7 @@ class TestExcludeFiltering:
                             mock_rerank.return_value = [{**candidates[0], "reason": "Great"}]
                             mock_enrich.return_value = mock_rerank.return_value
                             
-                            response = await recommend(body, request)
+                            response = await recommend(body, request, Response())
                             
                             # Should pass all candidates to rerank (no filtering)
                             rerank_call_args = mock_rerank.call_args
@@ -357,11 +359,11 @@ class TestExcludeCacheKey:
                             mock_enrich.return_value = mock_rerank.return_value
                             
                             # First call - cache miss
-                            response1 = await recommend(body, request)
+                            response1 = await recommend(body, request, Response())
                             assert mock_rerank.call_count == 1
                             
                             # Second call with same excludes - should hit cache
-                            response2 = await recommend(body, request)
+                            response2 = await recommend(body, request, Response())
                             assert mock_rerank.call_count == 1  # Not called again
                             
                             # Results should be identical
@@ -395,10 +397,66 @@ class TestExcludeCacheKey:
                             
                             # First call with exclude [550]
                             body1 = RecommendRequest(query="action", region="US", exclude_tmdb_ids=[550])
-                            await recommend(body1, request)
+                            await recommend(body1, request, Response())
                             assert mock_rerank.call_count == 1
                             
                             # Second call with different exclude [680] - should miss cache
                             body2 = RecommendRequest(query="action", region="US", exclude_tmdb_ids=[680])
-                            await recommend(body2, request)
+                            await recommend(body2, request, Response())
                             assert mock_rerank.call_count == 2  # Called again
+
+
+class TestServerTiming:
+    """Per-stage Server-Timing header on /recommend."""
+
+    @pytest.mark.asyncio
+    async def test_miss_sets_header_with_every_stage(self):
+        from unittest.mock import Mock
+
+        from fastapi import Request
+
+        from app.models import RecommendRequest
+        from app.routers.recommend import recommend
+
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "127.0.0.1"
+        request.headers = {}
+        body = RecommendRequest(query="server timing miss test", region="US")
+        response = Response()
+        result = [{"tmdb_id": 1, "title": "A", "overview": "o", "genres": [], "poster_path": None,
+                   "year": 2000, "vote_average": 7.0, "reason": "r", "providers": []}]
+
+        with patch('app.routers.recommend.expand_query', new_callable=AsyncMock, return_value="q"), \
+             patch('app.routers.recommend.embed_text', new_callable=AsyncMock, return_value=[0.1] * 1536), \
+             patch('app.routers.recommend.search_similar', new_callable=AsyncMock, return_value=[]), \
+             patch('app.routers.recommend.rerank', new_callable=AsyncMock, return_value=result), \
+             patch('app.routers.recommend._enrich_with_providers', new_callable=AsyncMock, return_value=result):
+            await recommend(body, request, response)
+
+        header = response.headers["Server-Timing"]
+        for stage in ("expand", "embed", "search", "rerank", "providers", "total"):
+            assert f"{stage};dur=" in header
+
+    @pytest.mark.asyncio
+    async def test_hit_sets_header_without_pipeline_stages(self):
+        from unittest.mock import Mock
+
+        from fastapi import Request
+
+        from app.models import RecommendRequest
+        from app.routers.recommend import recommend
+
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "127.0.0.1"
+        request.headers = {}
+        body = RecommendRequest(query="server timing hit test", region="US")
+        cache.store(cache.build_cache_key("server timing hit test:US"), [])
+        response = Response()
+
+        await recommend(body, request, response)
+
+        header = response.headers["Server-Timing"]
+        assert "cache;dur=" in header
+        assert "rerank" not in header

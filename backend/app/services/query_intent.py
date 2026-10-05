@@ -1,9 +1,13 @@
 from anthropic import AsyncAnthropic
 
+from app.cache import normalize_query
 from app.config import settings
 from app.services.observability import DatadogObservability
 
 EXPANSION_MODEL = "claude-haiku-4-5"
+# Queries with at least this many words are treated as already descriptive.
+# Title collisions ("Fall", "Heat", "Up") are almost always 1-2 words.
+MIN_DESCRIPTIVE_WORDS = 3
 
 _client: AsyncAnthropic | None = None
 
@@ -61,9 +65,22 @@ def _build_prompt(query: str) -> str:
     )
 
 
+def should_expand(query: str) -> bool:
+    """Decide whether a query needs the Haiku rewrite before embedding.
+
+    Skipping saves a full LLM round trip (~1 s) on the cache-miss path, but
+    short/ambiguous queries like "Fall" need expansion or the vector search
+    matches movies literally titled "Fall".
+    """
+    return len(normalize_query(query).split()) < MIN_DESCRIPTIVE_WORDS
+
+
 @DatadogObservability.trace_query_expansion
 async def expand_query(query: str) -> str:
     """Rewrite short/ambiguous queries into intent-rich phrasing before embedding."""
+    if not should_expand(query):
+        return query
+
     client = _get_client()
     prompt = _build_prompt(query)
 
