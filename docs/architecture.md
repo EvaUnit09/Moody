@@ -112,13 +112,13 @@ Moody/
 
 ## Build order
 
-1. Fetch script — pull ~30k movies from TMDB (title, overview, genres, keywords,
+1. Fetch script — pull movies from TMDB (title, overview, genres, keywords,
 poster path), dump to JSON. Runs once, not called live from the app.
+Quotas, failure behavior, and the embedding blob are in
+[catalog.md](catalog.md).
 2. Embed + load — build a text blob per movie, embed with
-text-embedding-3-small, insert into Supabase. Search now reads
-`embedding_half halfvec(1536)` (see `sql/schema.sql`); the original plan
-called for a `vector(1536)` column.
-Standalone script.
+text-embedding-3-small, upsert into Supabase as `embedding_half halfvec(1536)`
+(see `sql/schema.sql`). Standalone script.
 3. Test retrieval — throwaway script embedding a test query and running
 cosine similarity against the table, to confirm data quality before
 building anything on top of it.

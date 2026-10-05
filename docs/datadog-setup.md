@@ -34,7 +34,7 @@ The implementation follows the observability plan outlined in `architecture.md`:
 - **LLM Observability** (agentless) tracks token counts, costs, and latency for Claude Haiku calls
 - **Custom spans** instrument embedding, vector search, and LLM reranking operations  
 - **Trace filtering** limits observability to `/recommend` endpoint only
-- **Evaluation harness** provides systematic quality testing of recommendations
+- **Evaluation harness** provides systematic quality testing of recommendations (9 queries, including a short-query regression)
 
 **Note**: When using agentless LLM Observability mode (recommended for production), traditional APM tracing is disabled. LLM Observability provides comprehensive request-level visibility without requiring a Datadog agent.
 
@@ -48,9 +48,10 @@ The implementation follows the observability plan outlined in `architecture.md`:
    - LLM Observability integration for token/cost tracking
 
 2. **Instrumented Services**:
-   - `app/services/embeddings.py`: Traces OpenAI embedding calls
+   - `app/services/query_intent.py`: Traces the pre-embed Haiku rewrite (`llm.query_expansion`) and annotates that LLMObs span
+   - `app/services/embeddings.py`: Traces `embed_text` only. `embed_batch` (catalog load) is not decorated
    - `app/db.py`: Traces Supabase pgvector similarity searches
-   - `app/services/rerank.py`: Traces Claude Haiku reranking with LLM Observability
+   - `app/services/rerank.py`: Traces Claude Haiku reranking and attaches a hallucination-eval `Prompt`
 
 3. **Configuration**:
    - `app/config.py`: Datadog-specific settings (API key, service name, environment)
@@ -60,7 +61,7 @@ The implementation follows the observability plan outlined in `architecture.md`:
 
 1. **`app/services/eval.py`**: Evaluation framework
    - `EvaluationHarness` class for systematic quality testing
-   - 8 curated test queries covering different moods and scenarios
+   - 9 curated test queries, including the single-word regression `"Fall"`
    - Metrics: result count, genre diversity, average rating, pass/fail
 
 2. **`app/scripts/run_eval.py`**: Evaluation runner script
@@ -86,6 +87,8 @@ DD_API_KEY=your_datadog_api_key_here   # Required when DD_TRACE_ENABLED=true for
 DD_SERVICE=movie-rec-backend           # Service name in Datadog (default shown)
 DD_ENV=dev                             # Environment: dev, staging, production (default: dev)
 DD_VERSION=1.0.0                       # Optional: version tag for this deployment
+DD_SITE=datadoghq.com                  # LLMObs site (default shown)
+DD_LLMOBS_ML_APP=                      # Optional; falls back to DD_SERVICE
 DD_TRACE_AGENT_URL=                    # Optional: custom agent URL (advanced use only)
 ```
 
@@ -106,8 +109,8 @@ DD_TRACE_AGENT_URL=                    # Optional: custom agent URL (advanced us
 - Set `DD_TRACE_ENABLED=true` and provide `DD_API_KEY`
 - Uses agentless mode (data sent directly to Datadog, no local agent required)
 - Captures LLM calls, token usage, costs, and latency
-- Traditional APM tracing is **disabled** in this mode (only LLM Observability is active)
-- TraceFilter is not used (no agent to filter)
+- Traditional APM tracing is **disabled** in this mode (`tracer.configure(apm_tracing_disabled=True)`)
+- `RecommendOnlyFilter` is still registered on the tracer. It does not gate LLM Observability. Both Haiku calls are recorded because they call `wrap_llm_call()`, not because of that filter.
 
 **Agent-based APM (Advanced/Local Development Only)**:
 - Requires local Datadog agent running on port 8126
@@ -130,30 +133,38 @@ uvicorn app.main:app --reload
 
 ### Custom Spans
 
-Three custom spans are automatically added to the `/recommend` endpoint:
+On a `/recommend` request the tracer opens these spans when `DD_TRACE_ENABLED=true` and `ddtrace` imports:
 
-1. **`embedding.generate`**
+1. **`llm.query_expansion`**
+   - Resource: `anthropic.claude-haiku-4-5`
+   - Tags: provider, model, operation, original query length, expanded query length
+   - LLM Observability (`operation_name="query_expansion"`): input/output messages and token counts. No `Prompt` annotation.
+
+2. **`embedding.generate`**
    - Resource: `openai.text-embedding-3-small`
    - Tags: model, provider, input length, embedding dimension
+   - Decorates `embed_text` only. Catalog `embed_batch` does not emit this span.
 
-2. **`vector_search.similarity`**
+3. **`vector_search.similarity`**
    - Resource: `supabase.pgvector`
    - Tags: provider, index type (HNSW), similarity metric (cosine), limit, result count
 
-3. **`llm.rerank`**
+4. **`llm.rerank`**
    - Resource: `anthropic.claude-haiku-4-5`
    - Tags: provider, model, operation, query length, candidate count, output count
-   - LLM Observability: input/output tokens, cost estimate
+   - LLM Observability: token counts, plus a `Prompt` (`id="rerank_prompt"`) whose `query` variable is the user's original text and whose `context` variable is the candidate lines (`tmdb_id`, title, overview). `rag_query_variables` is `["query"]` and `rag_context_variables` is `["context"]`. If `ddtrace.llmobs.types.Prompt` cannot be imported, the call is still annotated without that prompt.
+
+`GET /popular` does not call these helpers.
 
 ### Trace Filtering
 
-Per the architecture plan, observability is scoped to **`/recommend` requests only**. Health checks (`/health`) and static assets do not generate observability data.
+`RecommendOnlyFilter` keeps a trace when the root span's `http.url` or `http.route` contains `/recommend`, and drops the rest. It is registered in both agentless and agent-based startup.
 
-**Important**: The `TraceFilter` that filters by endpoint is only active in **agent-based APM mode** (advanced/local development). In the recommended **agentless LLM Observability mode** (production), the tracer is disabled (`enabled=False`), so the TraceFilter is not used. Instead, LLM Observability naturally captures only `/recommend` because that's the only endpoint that calls `wrap_llm_call()`.
+In agentless mode, APM export is off, so that filter does not decide what shows up under LLM Observability. LLMObs spans come from `wrap_llm_call()` inside query expansion and rerank. `/health` and `/popular` do not call it.
 
 ## Running the Evaluation Harness
 
-The evaluation harness tests recommendation quality across 8 curated mood/scenario queries.
+The evaluation harness tests recommendation quality across 9 curated queries. It calls `expand_query`, then `embed_text`, then `search_similar` at that function's default limit of **25** (production `/recommend` uses 40), then `rerank` on the original query. It does not apply `exclude_tmdb_ids` and does not fetch watch providers.
 
 ### Basic Usage
 
@@ -170,8 +181,8 @@ python -m app.scripts.run_eval
 ============================================================
 EVALUATION SUMMARY
 ============================================================
-Total queries:          8
-Passed:                 8
+Total queries:          9
+Passed:                 9
 Failed:                 0
 Pass rate:              100.0%
 Avg results per query:  5.4
@@ -224,14 +235,17 @@ EvalQuery(
 
 ### Test Query Coverage
 
-The 8 test queries cover:
+The 9 test queries cover:
 - Emotional/mood-based requests ("something slow and melancholic")
 - Scenario-based requests ("Friday night with friends")
 - Genre + mood combinations ("mind-bending sci-fi")
 - Artistic characteristics ("visually stunning with minimal dialogue")
 - Audience-specific requests ("heartwarming family movie")
+- A one-word regression, `"Fall"`, described in code as a guard against matching the movie titled *Fall*. It uses the same five checks. `expected_genres` is Drama, Romance, Family, Comedy, and Fantasy (any one is enough).
 
 Each query defines `expected_genres` that must match at least one result genre, preventing irrelevant recommendations (e.g., Horror results for a Comedy query would fail).
+
+`run_eval` prints per-query detail when `--verbose` is set or when any query failed. Exit code is `0` only when `pass_rate` is exactly `1.0`.
 
 ## Datadog Dashboard Metrics
 
