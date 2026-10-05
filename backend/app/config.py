@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     # This prevents agent connection attempts when disabled
     dd_trace_enabled: bool = False
     dd_trace_agent_url: str | None = None  # Override agent URL (for local development with agent)
+    moody_host: str | None = None
 
     @property
     def allowed_origins_list(self) -> list[str]:

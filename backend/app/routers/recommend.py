@@ -74,7 +74,7 @@ async def _enrich_with_providers(
 
 
 @router.post("/recommend", response_model=RecommendResponse)
-@limiter.limit("10/minute")
+@limiter.limit("100/minute")
 async def recommend(body: RecommendRequest, request: Request) -> RecommendResponse:
     query = body.query.strip()
     if not query:
