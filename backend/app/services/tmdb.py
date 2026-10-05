@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_READ_TOKEN = os.getenv("API_READ_ACCESS_TOKEN")
+API_READ_TOKEN = os.getenv("TMDB_API_READ_TOKEN")
 BASE_URL = "https://api.themoviedb.org/3"
 
 HEADERS = {

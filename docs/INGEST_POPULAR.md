@@ -82,7 +82,7 @@ python -m app.scripts.ingest_popular
 ```
 
 Requires environment variables in `.env`:
-- `API_READ_ACCESS_TOKEN` - TMDB API read access token
+- `TMDB_API_READ_TOKEN` - TMDB API read access token
 - `SUPABASE_DB_URL` - Postgres connection string
 
 ### Via GitHub Actions (Active)
