@@ -10,7 +10,7 @@ Usage:
     python -m app.scripts.ingest_popular
 
 Environment variables (from .env):
-    - API_READ_ACCESS_TOKEN: TMDB API read access token
+    - TMDB_API_READ_TOKEN: TMDB API read access token
     - SUPABASE_DB_URL: Postgres connection string
 
 Exit codes:

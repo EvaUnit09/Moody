@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from slowapi import Limiter
 
 from app import cache
@@ -10,6 +10,7 @@ from app.models import RecommendRequest, RecommendResponse, WatchProvider
 from app.services.embeddings import embed_text
 from app.services.query_intent import expand_query
 from app.services.rerank import rerank
+from app.services.timing import StageTimer
 from app.services.tmdb import WatchProviderService
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,9 @@ def get_rate_limit_key(request: Request) -> str:
 # is multiplied (N replicas ≈ N×10/min). See get_rate_limit_key docstring.
 limiter = Limiter(key_func=get_rate_limit_key)
 
-CANDIDATE_LIMIT = 40
+# Candidates sent to the LLM rerank. Fewer candidates = fewer input tokens;
+# 25 still gives the reranker ~4x headroom over the 6 it returns.
+CANDIDATE_LIMIT = 25
 
 
 async def _enrich_with_providers(
@@ -75,7 +78,8 @@ async def _enrich_with_providers(
 
 @router.post("/recommend", response_model=RecommendResponse)
 @limiter.limit("10/minute")
-async def recommend(body: RecommendRequest, request: Request) -> RecommendResponse:
+async def recommend(body: RecommendRequest, request: Request, response: Response) -> RecommendResponse:
+    timer = StageTimer()
     query = body.query.strip()
     if not query:
         raise HTTPException(status_code=400, detail="query must not be empty")
@@ -90,16 +94,21 @@ async def recommend(body: RecommendRequest, request: Request) -> RecommendRespon
     exclude_ids = body.exclude_tmdb_ids or []
     cache_key = cache.build_cache_key(f"{query}:{region}", exclude_ids if exclude_ids else None)
     
-    cached = cache.get(cache_key)
+    with timer.stage("cache"):
+        cached = cache.get(cache_key)
     if cached is not None:
         # Cache hit logged at DEBUG level in cache.get()
+        response.headers["Server-Timing"] = timer.server_timing_header()
         return RecommendResponse(results=cached)
 
     logger.debug(f"Cache miss for query={query!r}")
     
-    search_query = await expand_query(query)
-    embedding = await embed_text(search_query)
-    candidates = await search_similar(embedding, limit=CANDIDATE_LIMIT)
+    with timer.stage("expand"):
+        search_query = await expand_query(query)
+    with timer.stage("embed"):
+        embedding = await embed_text(search_query)
+    with timer.stage("search"):
+        candidates = await search_similar(embedding, limit=CANDIDATE_LIMIT)
     
     # Filter out excluded tmdb_ids before reranking
     if exclude_ids:
@@ -107,14 +116,18 @@ async def recommend(body: RecommendRequest, request: Request) -> RecommendRespon
         candidates = [c for c in candidates if c["tmdb_id"] not in exclude_set]
         logger.debug(f"Filtered {len(exclude_ids)} excluded IDs, {len(candidates)} candidates remain")
     
-    results = await rerank(query, candidates)
+    with timer.stage("rerank"):
+        results = await rerank(query, candidates)
     
     # Enrich results with watch providers (async batch with concurrency control)
     semaphore = asyncio.Semaphore(WatchProviderService.MAX_CONCURRENT_REQUESTS)
-    enriched_results = await _enrich_with_providers(results, region, semaphore)
+    with timer.stage("providers"):
+        enriched_results = await _enrich_with_providers(results, region, semaphore)
 
     # Store with appropriate TTL (popular moods get longer cache)
     is_popular = cache._is_popular_mood(query)
     cache.store(cache_key, enriched_results, is_popular=is_popular)
 
+    logger.info(f"recommend miss timings {timer.log_line()}")
+    response.headers["Server-Timing"] = timer.server_timing_header()
     return RecommendResponse(results=enriched_results)

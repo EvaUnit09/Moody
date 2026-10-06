@@ -18,6 +18,12 @@ except ImportError:
 
 RERANK_MODEL = "claude-haiku-4-5"
 TOP_N = 6
+# Output tokens dominate rerank latency: Haiku writes each reason token by token,
+# so cap reason length and the token budget. 6 short reasons fit well under 512.
+RERANK_MAX_TOKENS = 512
+MAX_REASON_WORDS = 15
+# Trims input tokens; the opening of an overview carries most of its mood/premise.
+MAX_OVERVIEW_CHARS = 300
 
 _client: AsyncAnthropic | None = None
 
@@ -46,7 +52,10 @@ RERANK_TOOL = {
                     "type": "object",
                     "properties": {
                         "tmdb_id": {"type": "integer"},
-                        "reason": {"type": "string"},
+                        "reason": {
+                            "type": "string",
+                            "description": f"One short sentence, at most {MAX_REASON_WORDS} words.",
+                        },
                     },
                     "required": ["tmdb_id", "reason"],
                 },
@@ -57,16 +66,30 @@ RERANK_TOOL = {
 }
 
 
-def _build_prompt(query: str, candidates: list[dict]) -> str:
-    candidate_lines = "\n".join(
-        f"- tmdb_id: {c['tmdb_id']}, title: {c['title']}, overview: {c['overview']}"
+def _truncate_overview(overview: str | None) -> str:
+    """Cut an overview to MAX_OVERVIEW_CHARS at a word boundary, marking the cut with an ellipsis."""
+    text = (overview or "").strip()
+    if len(text) <= MAX_OVERVIEW_CHARS:
+        return text
+    cut = text[:MAX_OVERVIEW_CHARS].rsplit(" ", 1)[0]
+    return f"{cut.rstrip(',;:.')}…"
+
+
+def _format_candidates(candidates: list[dict]) -> str:
+    return "\n".join(
+        f"- tmdb_id: {c['tmdb_id']}, title: {c['title']}, overview: {_truncate_overview(c.get('overview'))}"
         for c in candidates
     )
+
+
+def _build_prompt(query: str, candidates: list[dict]) -> str:
+    candidate_lines = _format_candidates(candidates)
     return (
         f'User request: "{query}"\n\n'
         f"Candidate movies (from vector search):\n{candidate_lines}\n\n"
         f"Pick the best {TOP_N} matches for the user's request and give a "
-        "one-line reason for each, grounded in the movie's overview. Judge "
+        f"short reason for each (one sentence, at most {MAX_REASON_WORDS} words), "
+        "grounded in the movie's overview. Judge "
         "fit by mood, theme, and content, not by whether the request's words "
         "literally appear in the title — a movie titled after the request "
         "isn't a good match unless its overview also fits."
@@ -81,12 +104,8 @@ async def rerank(query: str, candidates: list[dict]) -> list[dict]:
     client = _get_client()
     prompt = _build_prompt(query, candidates)
     
-    # Build context string for LLMObs hallucination eval
-    # Format: each candidate on its own line with tmdb_id, title, and overview
-    context = "\n".join(
-        f"- tmdb_id: {c['tmdb_id']}, title: {c['title']}, overview: {c['overview']}"
-        for c in candidates
-    )
+    # Context for the LLMObs hallucination eval: the same truncated text the model saw
+    context = _format_candidates(candidates)
     
     # Wrap LLM call with LLM Observability context
     with DatadogObservability.wrap_llm_call(
@@ -96,7 +115,7 @@ async def rerank(query: str, candidates: list[dict]) -> list[dict]:
     ) as obs:
         message = await client.messages.create(
             model=RERANK_MODEL,
-            max_tokens=1024,
+            max_tokens=RERANK_MAX_TOKENS,
             tools=[RERANK_TOOL],
             tool_choice={"type": "tool", "name": "return_recommendations"},
             messages=[{"role": "user", "content": prompt}],
@@ -112,7 +131,8 @@ async def rerank(query: str, candidates: list[dict]) -> list[dict]:
                     'User request: "{query}"\n\n'
                     "Candidate movies (from vector search):\n{context}\n\n"
                     f"Pick the best {TOP_N} matches for the user's request and "
-                    "give a one-line reason for each, grounded in the movie's overview."
+                    f"give a short reason for each (one sentence, at most {MAX_REASON_WORDS} words), "
+                    "grounded in the movie's overview."
                 ),
                 variables={"query": query, "context": context},
                 rag_query_variables=["query"],

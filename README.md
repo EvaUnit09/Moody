@@ -50,6 +50,14 @@ original implementation plan.
 - **Observability:** Datadog APM + LLM Observability
 - **Hosting:** Vercel (frontend), Railway (backend)
 
+## Load testing
+
+The `/recommend` endpoint was profiled under sustained load to measure rate-limit
+behavior, LLM cost/latency, and cache hit rates. Performance improvements
+(query expansion gating, rerank pool reduction, connection pooling) cut
+cache-miss latency by ~35%. Full methodology, before/after findings, and
+Server-Timing breakdown are in [docs/STRESS_TEST.md](docs/STRESS_TEST.md);
+the Locust harness is in [backend/loadtest/](backend/loadtest/).
 
 ## Known limitations / what I'd improve next
 

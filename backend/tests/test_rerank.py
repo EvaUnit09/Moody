@@ -125,3 +125,57 @@ class TestRerank:
             prompt = call_kwargs["messages"][0]["content"]
             assert "a quiet evening" in prompt
             assert "Movie One" in prompt
+
+
+class TestRerankTokenBudget:
+    """Input/output trimming that keeps rerank latency down."""
+
+    def test_short_overview_unchanged(self):
+        from app.services.rerank import _truncate_overview
+
+        assert _truncate_overview("A quiet drama.") == "A quiet drama."
+
+    def test_missing_overview_becomes_empty_string(self):
+        from app.services.rerank import _truncate_overview
+
+        assert _truncate_overview(None) == ""
+
+    def test_long_overview_cut_at_word_boundary(self):
+        from app.services.rerank import MAX_OVERVIEW_CHARS, _truncate_overview
+
+        overview = "word " * 200
+
+        result = _truncate_overview(overview)
+
+        assert len(result) <= MAX_OVERVIEW_CHARS + 1
+        assert result.endswith("word…")
+
+    @pytest.mark.asyncio
+    async def test_prompt_truncates_overviews_but_keeps_every_candidate(self):
+        from app.services.rerank import MAX_OVERVIEW_CHARS
+
+        long_overview = "x" * 50 + " " + "tail " * 200
+        candidates = [{**c, "overview": long_overview} for c in CANDIDATES]
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(return_value=_mock_message([]))
+
+        with patch("app.services.rerank._get_client", return_value=mock_client):
+            await rerank("rainy day", candidates)
+
+        prompt = mock_client.messages.create.call_args.kwargs["messages"][0]["content"]
+        assert long_overview not in prompt
+        for c in candidates:
+            assert f"tmdb_id: {c['tmdb_id']}" in prompt
+        assert len(prompt) < len(candidates) * (MAX_OVERVIEW_CHARS + 100) + 1000
+
+    @pytest.mark.asyncio
+    async def test_uses_capped_max_tokens(self):
+        from app.services.rerank import RERANK_MAX_TOKENS
+
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(return_value=_mock_message([]))
+
+        with patch("app.services.rerank._get_client", return_value=mock_client):
+            await rerank("rainy day", CANDIDATES)
+
+        assert mock_client.messages.create.call_args.kwargs["max_tokens"] == RERANK_MAX_TOKENS

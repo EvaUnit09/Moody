@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_READ_TOKEN = os.getenv("API_READ_ACCESS_TOKEN")
+API_READ_TOKEN = os.getenv("TMDB_API_READ_TOKEN")
 BASE_URL = "https://api.themoviedb.org/3"
 
 HEADERS = {
@@ -16,6 +16,25 @@ HEADERS = {
 }
 
 MIN_VOTE_AVERAGE = 5.0
+TMDB_TIMEOUT_SECONDS = 5.0
+
+# One pooled client for the process: reuses TCP/TLS connections to TMDB instead of
+# paying a fresh handshake on every watch-provider lookup.
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(timeout=TMDB_TIMEOUT_SECONDS)
+    return _http_client
+
+
+async def close_http_client() -> None:
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
 
 GENRE_MAP: dict[int, str] = {
     28: "Action",
@@ -117,52 +136,52 @@ class WatchProviderService:
             return cached
         
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(
-                    f"{BASE_URL}/movie/{tmdb_id}/watch/providers",
-                    headers=HEADERS,
-                )
-                response.raise_for_status()
-                data = response.json()
-                
-                region_data = data.get("results", {}).get(normalized_region, {})
-                if not region_data:
-                    return []
-                
-                # Prefer flatrate (subscription streaming), fallback to buy/rent
-                providers = (
-                    region_data.get("flatrate", [])
-                    or region_data.get("buy", [])
-                    or region_data.get("rent", [])
-                )
-                
-                link = region_data.get("link", f"https://www.themoviedb.org/movie/{tmdb_id}/watch")
-                
-                # Validate link against allowlist
-                if not cls._is_link_allowed(link):
-                    print(f"[watch_providers] Rejected non-allowlisted link for tmdb_id={tmdb_id}: {link}")
-                    return []
-                
-                result = []
-                for provider in providers[:cls.MAX_PROVIDERS]:
-                    provider_data = {
-                        "name": provider.get("provider_name", ""),
-                        "logo_url": (
-                            f"{cls.LOGO_BASE_URL}{provider['logo_path']}"
-                            if provider.get("logo_path")
-                            else None
-                        ),
-                        "link": link,
-                    }
-                    result.append(provider_data)
-                
-                # Cache successful result (but not failures)
-                # Cache write failure must not affect the result returned to caller
-                if result:
-                    cls._store_cached_providers(cache_key, result)
-                
-                return result
-                
+            client = _get_http_client()
+            response = await client.get(
+                f"{BASE_URL}/movie/{tmdb_id}/watch/providers",
+                headers=HEADERS,
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            region_data = data.get("results", {}).get(normalized_region, {})
+            if not region_data:
+                return []
+            
+            # Prefer flatrate (subscription streaming), fallback to buy/rent
+            providers = (
+                region_data.get("flatrate", [])
+                or region_data.get("buy", [])
+                or region_data.get("rent", [])
+            )
+            
+            link = region_data.get("link", f"https://www.themoviedb.org/movie/{tmdb_id}/watch")
+            
+            # Validate link against allowlist
+            if not cls._is_link_allowed(link):
+                print(f"[watch_providers] Rejected non-allowlisted link for tmdb_id={tmdb_id}: {link}")
+                return []
+            
+            result = []
+            for provider in providers[:cls.MAX_PROVIDERS]:
+                provider_data = {
+                    "name": provider.get("provider_name", ""),
+                    "logo_url": (
+                        f"{cls.LOGO_BASE_URL}{provider['logo_path']}"
+                        if provider.get("logo_path")
+                        else None
+                    ),
+                    "link": link,
+                }
+                result.append(provider_data)
+            
+            # Cache successful result (but not failures)
+            # Cache write failure must not affect the result returned to caller
+            if result:
+                cls._store_cached_providers(cache_key, result)
+            
+            return result
+            
         except Exception as e:
             # Network/API errors - return empty list (don't cache failures)
             print(f"[watch_providers] Failed to fetch for tmdb_id={tmdb_id}, region={normalized_region}: {e}")
