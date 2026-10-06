@@ -26,7 +26,9 @@ genre/year dropdowns.
 
 The home screen carousel is a separate `GET /popular` read of the
 `popularity` column, refreshed by the ingest job in
-[docs/INGEST_POPULAR.md](docs/INGEST_POPULAR.md).
+[docs/INGEST_POPULAR.md](docs/INGEST_POPULAR.md). The one-time catalog
+load (discover quotas, keywords, embedding upsert) is
+[docs/catalog.md](docs/catalog.md).
 
 Raw vector similarity alone gives "in the neighborhood" results, not good
 judgment — the rerank step is what turns it into a curated shortlist. Request

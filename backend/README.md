@@ -40,7 +40,7 @@ Pipeline, in order:
 3. **Embed + search.** `text-embedding-3-small`, then cosine search on `movies.embedding_half` (`halfvec(1536)`). Limit is 40 (`CANDIDATE_LIMIT`). Rows with `vote_average` below 5.0 are dropped in SQL.
 4. **Excludes.** Matching `tmdb_id`s are removed from those 40 candidates before rerank. The search does not fetch replacements, so a long exclude list can leave the reranker a short pool.
 5. **Rerank.** Haiku picks up to 6 of the remaining candidates and writes a one-line reason grounded in the overview. Picks whose id is not in the candidate set are discarded.
-6. **Watch providers.** TMDB `/movie/{id}/watch/providers` for the region, concurrency capped at 10. Preference order is flatrate, then buy, then rent. Links must be `https://www.themoviedb.org/...` or `https://www.justwatch.com/...`. A failed fetch returns `[]` for that title and is not cached.
+6. **Watch providers.** TMDB `/movie/{id}/watch/providers` for the region, concurrency capped at 10, timeout 5s. Preference order is flatrate, then buy, then rent, at most 3. Every logo on a title shares that region's one link. The link must match `https://www.themoviedb.org/...` or `https://www.justwatch.com/...`; anything else drops the title's providers. A failed fetch returns `[]` and is not cached. Successful non-empty responses are cached in-process with no TTL, keyed `{tmdb_id}|{REGION}`.
 
 The web client omits `region`, so production traffic uses `US`.
 
@@ -65,8 +65,10 @@ The recommend cache and the popular cache are process-local. A GitHub Actions in
 - `app/services/` — `embeddings.py`, `query_intent.py` (query expansion), `rerank.py`, `tmdb.py` (genre names + watch providers)
 - `app/cache.py` — in-memory TTL cache and cache-key normalization
 - `app/db.py` — Supabase/pgvector access (asyncpg), including popularity-only updates
-- `app/scripts/` — `fetch_movies.py`, `build_embeddings.py`, `ingest_popular.py`, `create_index.py`, `run_eval.py`
+- `app/scripts/` — `fetch_movies.py`, `fetch_keywords.py`, `build_embeddings.py`, `ingest_popular.py`, `create_index.py`, `run_eval.py`
 - `sql/schema.sql` — `movies` table + HNSW index on `embedding_half`, run manually in the Supabase SQL editor
+
+Catalog order, quotas, and the `psycopg2` gap in `create_index.py` are in [docs/catalog.md](../docs/catalog.md). CI uses Python 3.12 (`requires-python >= 3.11`), `ruff check app`, and `pytest`.
 
 See the [root README](../README.md) for the full project overview and
 [docs/architecture.md](../docs/architecture.md) for stack decisions.

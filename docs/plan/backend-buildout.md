@@ -1,5 +1,9 @@
 # MovieRec Backend Build-Out Plan
 
+> Historical plan from before the backend existed. The running system is
+> [architecture.md](../architecture.md). Catalog load steps are
+> [catalog.md](../catalog.md).
+
 ## Context
 
 `docs/architecture.md` already defines the target design: TMDB movie data embedded
