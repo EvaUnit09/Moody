@@ -2,7 +2,7 @@
 
 One-time path that fills `movies` before `/recommend` or `/popular` can return anything. This is separate from the scheduled popularity refresh in [INGEST_POPULAR.md](INGEST_POPULAR.md). That job only `UPDATE`s rows that already exist.
 
-Run the scripts from `backend/` so `app` imports resolve. `API_READ_ACCESS_TOKEN` and `SUPABASE_DB_URL` come from `.env`. `OPENAI_API_KEY` is required only for the embedding step.
+Run the scripts from `backend/` so `app` imports resolve. `TMDB_API_READ_TOKEN` and `SUPABASE_DB_URL` come from `.env`. `OPENAI_API_KEY` is required only for the embedding step.
 
 ```bash
 mkdir -p data
