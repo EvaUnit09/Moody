@@ -5,14 +5,14 @@ Targets:
   GET  /popular    — cheap cached read
   GET  /health     — liveness
 
-POST /recommend is limited to 100/minute per client IP (slowapi, in-memory,
+POST /recommend is limited to 10/minute per client IP (slowapi, in-memory,
 keyed off X-Forwarded-For). A single Locust process shares one IP, and
 wait_time below gives roughly 15-20 recommend calls/min per user, so
 `-u 4` sits near the ceiling. 429s count as failures.
 
 The host comes from `settings.moody_host` (MOODY_HOST in backend/.env).
-Point it at the Railway test branch, never production. `--host` overrides it,
-and a host containing "production" is refused unless MOODY_ALLOW_PROD=1.
+By default, only localhost/127.0.0.1 are allowed. All deployed hosts (Railway,
+Vercel, etc.) are blocked unless MOODY_ALLOW_PROD=1 is set.
 
 Stats are split into "/recommend hit" and "/recommend miss". The split is by
 intent, so before the run starts the file warms every cache key the hit path
@@ -70,7 +70,7 @@ EXCLUDE_PRESETS: list[list[int]] = [[550], [680, 13], [155]]
 # latency out of /recommend hit. Costs one Claude/OpenAI call per key
 # (2 * len(MOOD_QUERIES), since each mood also has its exclude-preset variant).
 WARMUP_ENABLED = os.getenv("MOODY_WARMUP", "1") != "0"
-# Stay under the 100/min recommend limit while warming.
+# Stay under the 10/min recommend limit while warming.
 WARMUP_PER_MINUTE = max(1, int(os.getenv("MOODY_WARMUP_RATE", "80")))
 # slowapi uses a fixed 1-minute window. Waiting one window after the last warm
 # request means the real run starts with a fresh budget instead of 429ing.
@@ -80,11 +80,31 @@ log = logging.getLogger(__name__)
 
 
 def _refuse_production(host: str | None) -> None:
-    if host and "production" in host.lower() and os.getenv("MOODY_ALLOW_PROD") != "1":
-        raise SystemExit(
-            f"Refusing to load test {host}: it looks like production. "
-            "Point MOODY_HOST at the Railway test branch (or set MOODY_ALLOW_PROD=1)."
-        )
+    """Block load testing against production unless explicitly allowed.
+    
+    Safe patterns: localhost, 127.0.0.1, or explicit override via MOODY_ALLOW_PROD=1.
+    All other hosts (including Railway *.up.railway.app URLs) are blocked by default
+    to prevent accidental load testing of production or staging services.
+    """
+    if not host:
+        return
+    
+    # Allow override for intentional production load testing
+    if os.getenv("MOODY_ALLOW_PROD") == "1":
+        return
+    
+    # Explicit allowlist: localhost and 127.0.0.1 only
+    host_lower = host.lower()
+    safe_patterns = ["localhost", "127.0.0.1"]
+    
+    if any(pattern in host_lower for pattern in safe_patterns):
+        return
+    
+    # Block everything else (Railway, Vercel, any deployed service)
+    raise SystemExit(
+        f"Refusing to load test {host}: not in safe allowlist (localhost/127.0.0.1). "
+        "Set MOODY_ALLOW_PROD=1 to override and test the deployed service."
+    )
 
 
 def _exclude_preset(base_query: str) -> list[int]:
@@ -194,7 +214,7 @@ def _warm_cache(host: str) -> None:
     if rate_limited:
         log.error(
             "Warm-up hit a 429 and stopped early. The deployed limiter is lower than the "
-            "100/min this test assumes, so hit latency will still include cold misses."
+            "10/min production uses, so hit latency will still include cold misses."
         )
     log.info("Warm-up sent %d/%d keys (%d failed)", len(jobs), len(bodies), failures)
     if jobs and WARMUP_SETTLE_SECONDS:

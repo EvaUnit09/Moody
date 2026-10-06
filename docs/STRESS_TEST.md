@@ -21,7 +21,7 @@ How to run the test is in [`backend/loadtest/README.md`](../backend/loadtest/REA
 | Warm-up | 200 cache keys (100 moods × with/without exclude preset), then 60 s settle |
 | Traffic mix | `/recommend` 7 : `/popular` 2 : `/health` 1 |
 | `/recommend` split | 70% cache hits, 30% misses (`" v{n}"` suffix, pool of 20); 15% send `exclude_tmdb_ids` |
-| Rate limit | `100/minute` per client IP on this branch |
+| Rate limit | Raised to `100/minute` on test branch (production uses `10/minute`) |
 | Target | Railway test service (`MOODY_HOST`), never production |
 
 On a cache miss, `/recommend` runs five network calls in sequence:
@@ -30,7 +30,7 @@ On a cache miss, `/recommend` runs five network calls in sequence:
 expand (Claude Haiku) → embed (OpenAI) → pgvector search (Supabase) → rerank (Claude Haiku) → TMDB watch providers
 ```
 
-## Baseline (commit `81b4f58`)
+## Baseline (commit `e50ea64`)
 
 Locust results:
 
@@ -41,7 +41,7 @@ Locust results:
 | `/popular` | 37 | 94 ms | ~230 ms | — |
 | `/health` | 16 | 92 ms | ~170 ms | — |
 
-- Errors: 0%, with no 429s (about 61 recommend calls/min, under the 100/min limit).
+- Errors: 0%, with no 429s (about 61 recommend calls/min, under the 100/min test-branch limit).
 - Hits were network time plus an in-memory cache lookup. The slowest hit was 333 ms.
 - Every miss took between 4.6 s and 7.7 s. A miss costs about 50× a hit.
 - Railway CPU peaked under 0.15 vCPU, memory stayed flat at about 200 MB, and the error rate was 0%.
@@ -50,7 +50,7 @@ Locust results:
 
 ## Changes
 
-### `b058370` — perf: cut cache-miss latency and add per-stage timing
+### `525a355` — perf: cut cache-miss latency and add per-stage timing
 
 | Change | Where | Why |
 |---|---|---|
@@ -62,11 +62,11 @@ Locust results:
 | Skip query expansion for queries of ≥ 3 words (`should_expand`) | `app/services/query_intent.py` | Saves a whole Haiku call on descriptive queries; short ones like "Fall" are still expanded |
 | One pooled `httpx.AsyncClient` for TMDB | `app/services/tmdb.py`, `app/main.py` | Avoids a new TLS handshake per watch-provider lookup |
 
-### `78dc6f0` — fix: read TMDB token from `TMDB_API_READ_TOKEN`
+### `08ae2f4` — fix: read TMDB token from `TMDB_API_READ_TOKEN`
 
-The first rerun after `b058370` returned **1,435 / 1,435 TMDB `401 Unauthorized`** errors. The app read `API_READ_ACCESS_TOKEN`, but Railway and the GitHub ingest secret both define `TMDB_API_READ_TOKEN`. Every provider request therefore went out as `Bearer None`. `fetch_providers` returns `[]` on any failure, so `/recommend` still returned 200 and nothing in the response showed the problem. The new stage logging is what surfaced it.
+The first rerun after `525a355` returned **1,435 / 1,435 TMDB `401 Unauthorized`** errors. The app read `API_READ_ACCESS_TOKEN`, but Railway and the GitHub ingest secret both define `TMDB_API_READ_TOKEN`. Every provider request therefore went out as `Bearer None`. `fetch_providers` returns `[]` on any failure, so `/recommend` still returned 200 and nothing in the response showed the problem. The new stage logging is what surfaced it.
 
-## Results after changes (deploy `63e7e448`, 246 misses)
+## Results after changes (246 misses)
 
 All 414 requests returned 200, and there were no TMDB failures. The logs show two Datadog LLM Observability upload tracebacks (`HttpIoError`), which ran outside the request path and did not affect any response.
 
@@ -93,7 +93,7 @@ Before vs after:
 ## Findings
 
 1. **Rerank is now the bottleneck.** It takes about 80% of a miss, and its p95 alone (3.3 s) is over the 3 s SLO. Speeding up any other stage cannot meet the SLO.
-2. **Search has a long tail.** p50 is 235 ms but p95 is about 1 s, and in the earlier run (deploy `0faf3432`) the first misses after the deploy took 1.3–1.6 s in search. The likely cause is a cold HNSW index or cold database connections on Supabase.
+2. **Search has a long tail.** p50 is 235 ms but p95 is about 1 s, and in an earlier run the first misses after deploy took 1.3–1.6 s in search. The likely cause is a cold HNSW index or cold database connections on Supabase.
 3. **Providers are cheap now.** Six lookups take about 75 ms with the pooled client and successful results are cached.
 4. **Failures were invisible.** The TMDB outage went unnoticed until per-stage logging made it visible.
 5. **The server still has lots of headroom.** CPU and memory were never the constraint.

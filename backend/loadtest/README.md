@@ -10,7 +10,7 @@ Simulates users typing mood queries against `POST /recommend`, plus lighter
 
 ## Before you run
 
-Set `MOODY_HOST` in `backend/.env` to the Railway **test-branch** URL. The locustfile reads it through `settings.moody_host`. Swap that value after the branch is deployed; leave the production URL out of this run. The locustfile exits with an error if the host (from `.env` or `--host`) contains `production`, unless `MOODY_ALLOW_PROD=1` is set.
+Set `MOODY_HOST` in `backend/.env` to the target URL. The locustfile reads it through `settings.moody_host`. By default, **only localhost and 127.0.0.1 are allowed** to prevent accidental load testing of deployed services. All Railway, Vercel, and other deployed hosts are blocked unless `MOODY_ALLOW_PROD=1` is explicitly set.
 
 `POST /recommend` on that branch is limited to **100 requests per minute per client IP** (`slowapi`, in-memory, first hop of `X-Forwarded-For`). One Locust process shares one IP. `/popular` and `/health` are not limited.
 
@@ -18,9 +18,9 @@ Set `MOODY_HOST` in `backend/.env` to the Railway **test-branch** URL. The locus
 
 Suggested headless shape: `-u 4 -r 1 -t 2m` (about 60–80 recommend/min, near the ceiling). `-u 6` or more collects 429s. A 429 is a failure for this run.
 
-1. Put the `100/minute` limiter on a branch (for example `loadtest/locust`).
+1. Deploy a test branch with temporarily raised rate limits (production uses `10/minute`).
 2. Deploy that branch to a Railway environment you can afford to hammer.
-3. Point `MOODY_HOST` at that service.
+3. Point `MOODY_HOST` at that service and set `MOODY_ALLOW_PROD=1` to bypass the host guard.
 4. Each cache-miss recommend calls Claude (expand + rerank) and OpenAI (embed). Cost scales with unique queries. `MOODY_MISS_POOL` (default 20) caps miss suffixes, so the distinct miss keys stop at `100 queries × pool size`. A fresh service has a cold cache, so the file pre-warms before the run (see below).
 
 A high-VU run against the production URL mostly collects 429s and still pays for whatever misses get through.
@@ -36,7 +36,7 @@ cd backend
 # UI on http://localhost:8089
 locust -f loadtest/locustfile.py
 
-# Headless, near the 100/minute ceiling
+# Headless, requires raised limit on test branch (production is 10/minute)
 locust -f loadtest/locustfile.py --headless -u 4 -r 1 -t 2m
 ```
 
@@ -44,9 +44,9 @@ locust -f loadtest/locustfile.py --headless -u 4 -r 1 -t 2m
 
 ### Warm-up
 
-The `/recommend hit` stat is by intent, and on a cold service the first request for each cache key is a real miss. So before the run, the locustfile requests every key the hit path can use: each of the 100 moods, plus its exclude-preset variant. That is **200 real Claude/OpenAI calls**, sent at about 80/min (under the 100/min limit), then a 60 second wait so the limiter's one-minute window resets. Expect roughly **3.5 minutes** before traffic starts. The `-t` timer starts after that, and warm-up requests are not in the Locust stats.
+The `/recommend hit` stat is by intent, and on a cold service the first request for each cache key is a real miss. So before the run, the locustfile requests every key the hit path can use: each of the 100 moods, plus its exclude-preset variant. That is **200 real Claude/OpenAI calls**, sent below the rate limit, then a 60 second wait so the limiter's one-minute window resets. Expect roughly **3.5 minutes** before traffic starts. The `-t` timer starts after that, and warm-up requests are not in the Locust stats.
 
-- If a 429 comes back, warm-up stops and logs an error. That means the deployed limiter is lower than 100/min.
+- If a 429 comes back, warm-up stops and logs an error. That means the deployed limiter is lower than the warm-up rate.
 - In the web UI, wait for the `Warm-up done` log line before pressing Start. A host typed into the UI after startup is not warmed.
 - `MOODY_WARMUP=0` skips it (hit p95 then includes cold misses). `MOODY_WARMUP_RATE` and `MOODY_WARMUP_SETTLE` change the pace and the wait.
 - Warm-up runs only in a single-process run, not under `--master` or `--worker`.

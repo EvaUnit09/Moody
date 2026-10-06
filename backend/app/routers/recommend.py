@@ -77,7 +77,7 @@ async def _enrich_with_providers(
 
 
 @router.post("/recommend", response_model=RecommendResponse)
-@limiter.limit("100/minute")
+@limiter.limit("10/minute")
 async def recommend(body: RecommendRequest, request: Request, response: Response) -> RecommendResponse:
     timer = StageTimer()
     query = body.query.strip()
