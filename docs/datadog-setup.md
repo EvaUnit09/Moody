@@ -137,8 +137,9 @@ On a `/recommend` request the tracer opens these spans when `DD_TRACE_ENABLED=tr
 
 1. **`llm.query_expansion`**
    - Resource: `anthropic.claude-haiku-4-5`
+   - Wraps all of `expand_query`, including queries that skip the model. A skipped rewrite still sets `llm.query_length` and `llm.expanded_query_length` (they match).
    - Tags: provider, model, operation, original query length, expanded query length
-   - LLM Observability (`operation_name="query_expansion"`): input/output messages and token counts. No `Prompt` annotation.
+   - LLM Observability (`operation_name="query_expansion"`) runs only when `should_expand` is true: input/output messages and token counts. No `Prompt` annotation. A skip returns the original query and does not call `wrap_llm_call`.
 
 2. **`embedding.generate`**
    - Resource: `openai.text-embedding-3-small`
@@ -152,7 +153,7 @@ On a `/recommend` request the tracer opens these spans when `DD_TRACE_ENABLED=tr
 4. **`llm.rerank`**
    - Resource: `anthropic.claude-haiku-4-5`
    - Tags: provider, model, operation, query length, candidate count, output count
-   - LLM Observability: token counts, plus a `Prompt` (`id="rerank_prompt"`) whose `query` variable is the user's original text and whose `context` variable is the candidate lines (`tmdb_id`, title, overview). `rag_query_variables` is `["query"]` and `rag_context_variables` is `["context"]`. If `ddtrace.llmobs.types.Prompt` cannot be imported, the call is still annotated without that prompt.
+   - LLM Observability: token counts, plus a `Prompt` (`id="rerank_prompt"`) whose `query` variable is the user's original text and whose `context` variable is the candidate lines the model saw (`tmdb_id`, title, overview cut to 300 characters). `rag_query_variables` is `["query"]` and `rag_context_variables` is `["context"]`. If `ddtrace.llmobs.types.Prompt` cannot be imported, the call is still annotated without that prompt.
 
 `GET /popular` does not call these helpers.
 
@@ -164,7 +165,9 @@ In agentless mode, APM export is off, so that filter does not decide what shows 
 
 ## Running the Evaluation Harness
 
-The evaluation harness tests recommendation quality across 9 curated queries. It calls `expand_query`, then `embed_text`, then `search_similar` at that function's default limit of **25** (production `/recommend` uses 40), then `rerank` on the original query. It does not apply `exclude_tmdb_ids` and does not fetch watch providers.
+The evaluation harness tests recommendation quality across 9 curated queries. It calls `expand_query`, then `embed_text`, then `search_similar` with `limit=25` (the same `CANDIDATE_LIMIT` `POST /recommend` passes), then `rerank` on the original query. It does not apply `exclude_tmdb_ids` and does not fetch watch providers.
+
+Eight of the queries are 3 or more words after normalization, so expansion does not call Haiku and the embedding is the original text. `"Fall"` is the query that still expands. A query passes when it returns at least 3 results, matches at least one expected genre, averages `vote_average` of at least 6.0, and the average reason is at least 20 characters (`min_reason_length`). The rerank prompt asks for at most 15 words, which is a separate limit from that character floor.
 
 ### Basic Usage
 

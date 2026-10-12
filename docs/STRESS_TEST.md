@@ -24,11 +24,13 @@ How to run the test is in [`backend/loadtest/README.md`](../backend/loadtest/REA
 | Rate limit | Raised to `100/minute` on test branch (production uses `10/minute`) |
 | Target | Railway test service (`MOODY_HOST`), never production |
 
-On a cache miss, `/recommend` runs five network calls in sequence:
+On a cache miss, `/recommend` runs up to five network calls in sequence:
 
 ```
 expand (Claude Haiku) → embed (OpenAI) → pgvector search (Supabase) → rerank (Claude Haiku) → TMDB watch providers
 ```
+
+After the changes below, expand is a local return for queries of 3 or more words, so that stage is often 0 ms and only four calls leave the process.
 
 ## Baseline (commit `e50ea64`)
 
@@ -112,5 +114,5 @@ Before vs after:
 - [ ] Shrink the rerank output based on that measurement: ranked IDs only, shorter tag-style reasons, or reasons loaded after the results.
 - [ ] Keep pgvector warm: run a query at startup and send one periodically, to cut the search p95 tail.
 - [ ] Change the Locust miss suffix so it doesn't change the word count (for example, use a cache-busting field instead of a word).
-- [ ] Update the 4 rate-limit tests in `backend/tests/test_rate_limit_and_cache.py`, which still expect a 10/minute limit.
+- [x] Leave the rate-limit tests at 10/minute. The 100/minute cap was only on the load-test branch. `recommend.py` on main is `@limiter.limit("10/minute")`, and `test_rate_limit_and_cache.py` matches that.
 - [ ] Capture a full Locust report on the next run so hit and miss numbers are measured the same way as the baseline.
