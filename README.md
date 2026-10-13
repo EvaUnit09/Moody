@@ -6,7 +6,7 @@ A RAG-based movie recommendation app: describe a mood or scenario in plain
 language and get back curated picks with reasons, instead of filtering by
 genre/year dropdowns.
 
-**Live demo:** https://moody-alpha-three.vercel.app
+**Live demo:** https://www.moodyalpha.app
 
 ## How it works
 
