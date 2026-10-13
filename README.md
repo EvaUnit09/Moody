@@ -12,17 +12,19 @@ genre/year dropdowns.
 
 1. ~30k movies (title, overview, genres, keywords) are embedded and stored in
    Postgres as `halfvec(1536)` via pgvector.
-2. Every query is sent to Claude Haiku for expansion. Short or ambiguous text
-   is rewritten into a mood description; an already-clear request is returned
-   unchanged. That expanded text is embedded with `text-embedding-3-small`.
-   The original wording is what the reranker judges.
-3. Vector search returns the top 40 candidates with `vote_average >= 5.0`.
+2. Queries of fewer than 3 words (after cache normalization) go to Claude
+   Haiku for expansion, and that rewrite is embedded with
+   `text-embedding-3-small`. A query of 3 or more words is embedded as typed,
+   which skips the expansion call. The original wording is what the reranker
+   judges.
+3. Vector search returns the top 25 candidates with `vote_average >= 5.0`.
    Hidden titles (`exclude_tmdb_ids`, at most 100) are removed from that
    list before rerank. The web client sends its local passed list when
    "don't show hidden" is on.
-4. Haiku reranks that pool to at most 6 picks and writes a one-line reason
-   for each, grounded in the movie's overview. Watch-provider links for the
-   `US` region are attached before the response is cached.
+4. Haiku reranks that pool to at most 6 picks. Each reason is prompted as one
+   sentence of at most 15 words, grounded in an overview cut to 300
+   characters. Watch-provider links for the `US` region are attached before
+   the response is cached.
 
 The home screen carousel is a separate `GET /popular` read of the
 `popularity` column, refreshed by the ingest job in
@@ -63,6 +65,9 @@ the Locust harness is in [backend/loadtest/](backend/loadtest/).
 
 - Rate limiting (`slowapi`, in-memory) is per-instance — fine for a single
   Railway replica, would need a shared store (Redis) to scale past one.
+- A cache miss is still slower than the 3s p95 target. Rerank is most of
+  that time; stage timings and the load-test method are in
+  [docs/STRESS_TEST.md](docs/STRESS_TEST.md).
 - No enforced coverage threshold yet; `rerank.py` and `embeddings.py` have
   thinner test coverage than the rest of the backend.
 - No end-to-end tests (component + unit coverage only).

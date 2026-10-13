@@ -7,9 +7,10 @@ get back curated picks with reasons, instead of filtering by genre/year dropdown
 ## Core concept
 
 1. Embed TMDB movie data (overview, keywords, genres) into a vector store
-2. Expand the query with Haiku, then embed that text with the same model used
-   for the catalog. Reranking still sees the user's original words.
-3. Vector search pulls the top 40 candidates (`vote_average >= 5.0`)
+2. Expand queries of fewer than 3 normalized words with Haiku, then embed
+   that text with the same model used for the catalog. Longer queries are
+   embedded as typed. Reranking still sees the user's original words.
+3. Vector search pulls the top 25 candidates (`vote_average >= 5.0`)
 4. Optional `exclude_tmdb_ids` are removed from that pool before rerank
 5. An LLM reranks and justifies up to 6 picks, then watch providers are attached
 6. Results shown with poster art and a one-line reason per pick
@@ -28,10 +29,16 @@ cache hit? ──yes──▶ return cached results
      │
      no
      ▼
-expand_query (Haiku) → embed expanded text → search_similar (limit 40)
+expand_query (Haiku only when the query is under 3 words; otherwise the
+original text) → embed → search_similar (limit 25)
      → drop exclude_tmdb_ids → rerank original query (top 6)
      → TMDB watch providers (region, default US) → cache and return
 ```
+
+A successful response sets `Server-Timing`. A hit records the cache lookup;
+a miss records every stage above and logs one INFO line. Constraints (word
+count, overview trim, reason length) are in
+[backend/README.md](../backend/README.md).
 
 `GET /popular` reads `movies.popularity` (16 rows, vote count at least 100).
 It does not embed or rerank. The column is refreshed by
@@ -50,7 +57,7 @@ Embeddings are stored as `halfvec(1536)` with an HNSW index
 | Embedding model | OpenAI text-embedding-3-small | Cheap ($0.02/1M tokens), reliable, well-documented |
 | Stored vector | `halfvec(1536)` + HNSW | Half precision keeps the ~30k catalog inside Supabase index limits while search still uses cosine distance |
 | Vector store | Supabase (pgvector) | Stays in Postgres, familiar from prior work, generous free tier |
-| Query expansion | Claude Haiku 4.5, every request | Stops short queries from matching a title that contains the same word; clear queries are instructed to pass through unchanged |
+| Query expansion | Claude Haiku 4.5, queries under 3 words | Stops short queries from matching a title that contains the same word. Three or more words skip the call and are embedded as typed |
 | Backend framework | FastAPI | Project is fundamentally a RAG service, not a full-stack gateway — no need for a Node layer |
 | Reranking LLM | Claude Haiku 4.5 | Fast, cheap, keeps tooling consistent with other AI projects (ops-agent, LangSmith) |
 | Query caching | In-memory (dict + TTL) | Cuts redundant LLM calls on repeat queries with near-zero build cost; upgradeable to Redis later as a scaling story |
@@ -63,9 +70,12 @@ Embeddings are stored as `halfvec(1536)` with an HNSW index
 ## Observability plan
 
 - `ddtrace-run` wraps the FastAPI app for APM
-- Custom spans around: embedding call, vector search, Haiku rerank call
+- Custom spans around: query expansion, embedding call, vector search, Haiku rerank
+- The expansion span still opens when the rewrite is skipped. LLM Observability
+  token annotation runs only on the Haiku calls that actually happen (rerank,
+  and expansion when the query is under 3 words)
 - Datadog LLM Observability tracks token counts, cost per request, and latency
-on the Haiku call specifically
+on those Haiku calls
 - Dashboard: requests/min, p50/p95 latency, error rate, cost per day
 - Tracing scoped to `/recommend` only — not static assets or health checks,
 both for free-tier limits and signal-to-noise
@@ -89,6 +99,7 @@ Moody/
         embeddings.py
         query_intent.py
         rerank.py
+        timing.py
         observability.py
         eval.py
       scripts/
@@ -122,9 +133,9 @@ text-embedding-3-small, upsert into Supabase as `embedding_half halfvec(1536)`
 3. Test retrieval — throwaway script embedding a test query and running
 cosine similarity against the table, to confirm data quality before
 building anything on top of it.
-4. FastAPI endpoint — `POST /recommend`: expand query → embed → vector search
-top 40 → optional exclude filter → Haiku rerank → return up to 6 with reasons
-and watch providers. `GET /popular` serves the home carousel.
+4. FastAPI endpoint — `POST /recommend`: expand short queries → embed → vector
+search top 25 → optional exclude filter → Haiku rerank → return up to 6 with
+reasons and watch providers. `GET /popular` serves the home carousel.
 5. Datadog instrumentation — APM tracing + custom spans + LLM Observability,
 added before deploying so there's a real request flow to instrument.
 6. Rate limiting — IP-based limiter (e.g. slowapi), informed by what Datadog

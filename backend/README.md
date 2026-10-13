@@ -36,13 +36,26 @@ Response is `{ "results": [ ... ] }`. Each result is a movie plus `reason` and `
 Pipeline, in order:
 
 1. **Cache lookup.** The key is `build_cache_key(f"{query}:{region}", exclude_ids)`. `normalize_query` lowercases, turns hyphens into spaces, and strips other punctuation, so the region code is concatenated onto the normalized query. Exclude ids are sorted and de-duplicated; an empty list is stored the same as omitting the field. A hit skips every step below. Default TTL is 1 hour. Queries that match a popular-mood keyword in `cache.py` are stored for 2 hours.
-2. **Query expansion.** `expand_query` always calls Claude Haiku (`claude-haiku-4-5`). The model is instructed to leave an already-clear mood or plot request unchanged, and to rewrite short or ambiguous text (a season, a single word) into a 1–2 sentence description so the embedding does not latch onto a title. The expanded string is what gets embedded. The **original** query is what the reranker sees.
-3. **Embed + search.** `text-embedding-3-small`, then cosine search on `movies.embedding_half` (`halfvec(1536)`). Limit is 40 (`CANDIDATE_LIMIT`). Rows with `vote_average` below 5.0 are dropped in SQL.
-4. **Excludes.** Matching `tmdb_id`s are removed from those 40 candidates before rerank. The search does not fetch replacements, so a long exclude list can leave the reranker a short pool.
-5. **Rerank.** Haiku picks up to 6 of the remaining candidates and writes a one-line reason grounded in the overview. Picks whose id is not in the candidate set are discarded.
-6. **Watch providers.** TMDB `/movie/{id}/watch/providers` for the region, concurrency capped at 10, timeout 5s. Preference order is flatrate, then buy, then rent, at most 3. Every logo on a title shares that region's one link. The link must match `https://www.themoviedb.org/...` or `https://www.justwatch.com/...`; anything else drops the title's providers. A failed fetch returns `[]` and is not cached. Successful non-empty responses are cached in-process with no TTL, keyed `{tmdb_id}|{REGION}`.
+2. **Query expansion.** `should_expand` counts words in `normalize_query(query)` (lowercase, hyphens become spaces, other punctuation dropped). Fewer than 3 words (`MIN_DESCRIPTIVE_WORDS`) calls Claude Haiku (`claude-haiku-4-5`, `max_tokens` 256) to rewrite the text into 1–2 sentences so the embedding does not latch onto a title. Three or more words return the original string and do not call the model. `"Fall"` and `"date night"` expand. `"sci-fi"` becomes two words (`sci fi`) and expands. `"cozy rainy day"` is embedded as typed. The string returned by `expand_query` is what gets embedded. The **original** query is what the reranker sees.
+3. **Embed + search.** `text-embedding-3-small`, then cosine search on `movies.embedding_half` (`halfvec(1536)`). Limit is 25 (`CANDIDATE_LIMIT` in `recommend.py`; `search_similar` defaults to the same 25). Rows with `vote_average` below 5.0 are dropped in SQL.
+4. **Excludes.** Matching `tmdb_id`s are removed from those 25 candidates before rerank. The search does not fetch replacements, so a long exclude list can leave the reranker a short pool.
+5. **Rerank.** Haiku (`max_tokens` 512) picks up to 6 of the remaining candidates. Each overview in the prompt is cut to 300 characters at a word boundary (`MAX_OVERVIEW_CHARS`); a cut is marked with `…`. The tool schema asks for one sentence of at most 15 words (`MAX_REASON_WORDS`), grounded in that truncated overview. The API does not reject a longer reason. Picks whose id is not in the candidate set are discarded.
+6. **Watch providers.** TMDB `/movie/{id}/watch/providers` for the region, concurrency capped at 10, timeout 5s, through one process-wide `httpx.AsyncClient` that `main.py` closes on shutdown. Preference order is flatrate, then buy, then rent, at most 3. Every logo on a title shares that region's one link. The link must match `https://www.themoviedb.org/...` or `https://www.justwatch.com/...`; anything else drops the title's providers. A failed fetch returns `[]` and is not cached. Successful non-empty responses are cached in-process with no TTL, keyed `{tmdb_id}|{REGION}`. The bearer token is `TMDB_API_READ_TOKEN` (read at import). A missing or wrong token is a 401 from TMDB, which this step turns into `[]`. The recommend response is still 200.
 
 The web client omits `region`, so production traffic uses `US`.
+
+### Stage timing
+
+Every successful `POST /recommend` sets `Server-Timing`. Durations are milliseconds with one decimal (`expand;dur=812.4`), and the value always ends with `total`.
+
+| Outcome | Header stages | Log |
+| --- | --- | --- |
+| Cache hit | `cache`, `total` | none (the hit is DEBUG inside `cache.get`) |
+| Cache miss | `cache`, `expand`, `embed`, `search`, `rerank`, `providers`, `total` | one INFO line: `recommend miss timings cache=…ms expand=…ms embed=…ms search=…ms rerank=…ms providers=…ms total=…ms` |
+
+`app` loggers are INFO and the root logger is WARNING, so third-party INFO lines stay quiet and the miss line still shows up. A failure in expansion, embed, or rerank is a 500: no `Server-Timing` header, no timing line, and the result is not cached. The frontend does not read the header.
+
+Empty `providers` on an otherwise successful response usually means TMDB rejected the call. Confirm `TMDB_API_READ_TOKEN` on the service. The name `API_READ_ACCESS_TOKEN` is not read. `fetch_providers` logs the failure with `print`, not the `app` logger.
 
 ### `GET /popular`
 
@@ -62,7 +75,7 @@ The recommend cache and the popular cache are process-local. A GitHub Actions in
 
 - `app/main.py` — FastAPI app, CORS, rate-limit handler, popular-cache warm loop
 - `app/routers/` — `recommend.py` (`POST /recommend`), `popular.py` (`GET /popular`)
-- `app/services/` — `embeddings.py`, `query_intent.py` (query expansion), `rerank.py`, `tmdb.py` (genre names + watch providers)
+- `app/services/` — `embeddings.py`, `query_intent.py` (query expansion), `rerank.py`, `timing.py` (`Server-Timing`), `tmdb.py` (genre names + watch providers)
 - `app/cache.py` — in-memory TTL cache and cache-key normalization
 - `app/db.py` — Supabase/pgvector access (asyncpg), including popularity-only updates
 - `app/scripts/` — `fetch_movies.py`, `fetch_keywords.py`, `build_embeddings.py`, `ingest_popular.py`, `create_index.py`, `run_eval.py`
