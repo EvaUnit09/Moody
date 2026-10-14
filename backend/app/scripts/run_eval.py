@@ -46,6 +46,8 @@ async def main() -> None:
             "start_time": start_time.isoformat(),
             "end_time": end_time.isoformat(),
             "elapsed_seconds": round(elapsed, 2),
+            "settings": results["summary"].get("settings"),
+            "candidate_limit": results["summary"].get("candidate_limit"),
         }
 
         if output_json:

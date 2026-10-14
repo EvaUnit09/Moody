@@ -5,13 +5,125 @@ Provides systematic testing of recommendation quality with metrics for
 relevance, diversity, and consistency.
 """
 
+import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
 from app.db import search_similar
+from app.services import query_intent as query_intent_mod
+from app.services import rerank as rerank_mod
 from app.services.embeddings import embed_text
 from app.services.query_intent import expand_query
 from app.services.rerank import rerank
+
+# Measurement-only. The /recommend route never reads this. Set to "1" to replay
+# the pre-#22 knobs on this eval process: 40 candidates, always expand, full
+# overviews, max_tokens 1024, uncapped reason text.
+PRE_22_EVAL_ENV = "MOODY_EVAL_PRE_22"
+MAIN_CANDIDATE_LIMIT = 25
+PRE_22_CANDIDATE_LIMIT = 40
+PRE_22_RERANK_MAX_TOKENS = 1024
+
+PRE_22_RERANK_TOOL = {
+    "name": "return_recommendations",
+    "description": "Return the best movie recommendations with a one-line reason each.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "results": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "tmdb_id": {"type": "integer"},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["tmdb_id", "reason"],
+                },
+            }
+        },
+        "required": ["results"],
+    },
+}
+
+
+def eval_uses_pre_22_settings() -> bool:
+    return os.environ.get(PRE_22_EVAL_ENV) == "1"
+
+
+def candidate_limit() -> int:
+    return PRE_22_CANDIDATE_LIMIT if eval_uses_pre_22_settings() else MAIN_CANDIDATE_LIMIT
+
+
+def _always_expand(_query: str) -> bool:
+    return True
+
+
+def _pre_22_format_candidates(candidates: list[dict]) -> str:
+    return "\n".join(
+        f"- tmdb_id: {c['tmdb_id']}, title: {c['title']}, overview: {c.get('overview')}"
+        for c in candidates
+    )
+
+
+def _pre_22_build_prompt(query: str, candidates: list[dict]) -> str:
+    candidate_lines = _pre_22_format_candidates(candidates)
+    return (
+        f'User request: "{query}"\n\n'
+        f"Candidate movies (from vector search):\n{candidate_lines}\n\n"
+        f"Pick the best {rerank_mod.TOP_N} matches for the user's request and give a "
+        "one-line reason for each, grounded in the movie's overview. Judge "
+        "fit by mood, theme, and content, not by whether the request's words "
+        "literally appear in the title — a movie titled after the request "
+        "isn't a good match unless its overview also fits."
+    )
+
+
+def _pre_22_truncate_overview(overview: str | None) -> str:
+    return (overview or "").strip()
+
+
+@contextmanager
+def pre_22_measurement_knobs() -> Iterator[None]:
+    """Patch expansion and rerank for a pre-#22 eval process, then restore.
+
+    Does not touch the recommend router. Safe to use when the env var is unset
+    (no-op) so evaluate_query can always wrap the pipeline.
+    """
+    if not eval_uses_pre_22_settings():
+        yield
+        return
+
+    previous_should_expand = query_intent_mod.should_expand
+    previous_max_tokens = rerank_mod.RERANK_MAX_TOKENS
+    previous_max_overview = rerank_mod.MAX_OVERVIEW_CHARS
+    previous_max_reason = rerank_mod.MAX_REASON_WORDS
+    previous_tool = rerank_mod.RERANK_TOOL
+    previous_build_prompt = rerank_mod._build_prompt
+    previous_format_candidates = rerank_mod._format_candidates
+    previous_truncate = rerank_mod._truncate_overview
+
+    query_intent_mod.should_expand = _always_expand
+    rerank_mod.RERANK_MAX_TOKENS = PRE_22_RERANK_MAX_TOKENS
+    rerank_mod.MAX_OVERVIEW_CHARS = 10**9
+    rerank_mod.MAX_REASON_WORDS = 10**9
+    rerank_mod.RERANK_TOOL = PRE_22_RERANK_TOOL
+    rerank_mod._build_prompt = _pre_22_build_prompt
+    rerank_mod._format_candidates = _pre_22_format_candidates
+    rerank_mod._truncate_overview = _pre_22_truncate_overview
+    try:
+        yield
+    finally:
+        query_intent_mod.should_expand = previous_should_expand
+        rerank_mod.RERANK_MAX_TOKENS = previous_max_tokens
+        rerank_mod.MAX_OVERVIEW_CHARS = previous_max_overview
+        rerank_mod.MAX_REASON_WORDS = previous_max_reason
+        rerank_mod.RERANK_TOOL = previous_tool
+        rerank_mod._build_prompt = previous_build_prompt
+        rerank_mod._format_candidates = previous_format_candidates
+        rerank_mod._truncate_overview = previous_truncate
 
 
 @dataclass
@@ -126,11 +238,13 @@ class EvaluationHarness:
         Returns metrics including result count, genre diversity, expected genre matching,
         and reason quality indicators.
         """
-        # Run through the full pipeline
-        search_query = await expand_query(eval_query.query)
-        embedding = await embed_text(search_query)
-        candidates = await search_similar(embedding, limit=25)
-        results = await rerank(eval_query.query, candidates)
+        # Run through the full pipeline. pre_22_measurement_knobs is a no-op
+        # unless MOODY_EVAL_PRE_22=1, so /recommend is unaffected.
+        with pre_22_measurement_knobs():
+            search_query = await expand_query(eval_query.query)
+            embedding = await embed_text(search_query)
+            candidates = await search_similar(embedding, limit=candidate_limit())
+            results = await rerank(eval_query.query, candidates)
 
         # Calculate metrics
         results_count = len(results)
@@ -226,6 +340,8 @@ class EvaluationHarness:
                 "avg_results_per_query": round(avg_results_per_query, 2),
                 "avg_genre_diversity": round(avg_genre_diversity, 2),
                 "avg_rating": round(avg_rating, 2),
+                "settings": "pre_22" if eval_uses_pre_22_settings() else "main",
+                "candidate_limit": candidate_limit(),
             },
             "results": [
                 {

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from slowapi import Limiter
@@ -49,6 +50,10 @@ def get_rate_limit_key(request: Request) -> str:
 # is multiplied (N replicas ≈ N×10/min). See get_rate_limit_key docstring.
 limiter = Limiter(key_func=get_rate_limit_key)
 
+# Production default stays 10/minute. Locust on a test process may raise this via
+# MOODY_RECOMMEND_RATE_LIMIT=100/minute; that env is not set in production.
+RECOMMEND_RATE_LIMIT = os.getenv("MOODY_RECOMMEND_RATE_LIMIT", "10/minute")
+
 # Candidates sent to the LLM rerank. Fewer candidates = fewer input tokens;
 # 25 still gives the reranker ~4x headroom over the 6 it returns.
 CANDIDATE_LIMIT = 25
@@ -77,7 +82,7 @@ async def _enrich_with_providers(
 
 
 @router.post("/recommend", response_model=RecommendResponse)
-@limiter.limit("10/minute")
+@limiter.limit(RECOMMEND_RATE_LIMIT)
 async def recommend(body: RecommendRequest, request: Request, response: Response) -> RecommendResponse:
     timer = StageTimer()
     query = body.query.strip()
@@ -117,7 +122,7 @@ async def recommend(body: RecommendRequest, request: Request, response: Response
         logger.debug(f"Filtered {len(exclude_ids)} excluded IDs, {len(candidates)} candidates remain")
     
     with timer.stage("rerank"):
-        results = await rerank(query, candidates)
+        results = await rerank(query, candidates, timer=timer)
     
     # Enrich results with watch providers (async batch with concurrency control)
     semaphore = asyncio.Semaphore(WatchProviderService.MAX_CONCURRENT_REQUESTS)

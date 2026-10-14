@@ -1,7 +1,10 @@
+import logging
+
 from anthropic import AsyncAnthropic
 
 from app.config import settings
 from app.services.observability import DatadogObservability
+from app.services.timing import StageTimer
 
 try:
     # Try importing from ddtrace.llmobs.types first (ddtrace 4.x+)
@@ -24,6 +27,8 @@ RERANK_MAX_TOKENS = 512
 MAX_REASON_WORDS = 15
 # Trims input tokens; the opening of an overview carries most of its mood/premise.
 MAX_OVERVIEW_CHARS = 300
+
+logger = logging.getLogger(__name__)
 
 _client: AsyncAnthropic | None = None
 
@@ -96,8 +101,26 @@ def _build_prompt(query: str, candidates: list[dict]) -> str:
     )
 
 
+def _record_token_usage(message: object, timer: StageTimer | None) -> None:
+    usage = getattr(message, "usage", None)
+    input_tokens = getattr(usage, "input_tokens", None)
+    output_tokens = getattr(usage, "output_tokens", None)
+    if input_tokens is None or output_tokens is None:
+        return
+    if timer is not None:
+        timer.extra("rerank_in", input_tokens)
+        timer.extra("rerank_out", output_tokens)
+        return
+    logger.info("rerank tokens input=%s output=%s", input_tokens, output_tokens)
+
+
 @DatadogObservability.trace_llm_rerank
-async def rerank(query: str, candidates: list[dict]) -> list[dict]:
+async def rerank(
+    query: str,
+    candidates: list[dict],
+    *,
+    timer: StageTimer | None = None,
+) -> list[dict]:
     if not candidates:
         return []
 
@@ -120,6 +143,7 @@ async def rerank(query: str, candidates: list[dict]) -> list[dict]:
             tool_choice={"type": "tool", "name": "return_recommendations"},
             messages=[{"role": "user", "content": prompt}],
         )
+        _record_token_usage(message, timer)
         
         # Build prompt annotation for hallucination evaluation
         # The hallucination eval expects distinct query and context variables

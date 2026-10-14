@@ -51,7 +51,7 @@ Every successful `POST /recommend` sets `Server-Timing`. Durations are milliseco
 | Outcome | Header stages | Log |
 | --- | --- | --- |
 | Cache hit | `cache`, `total` | none (the hit is DEBUG inside `cache.get`) |
-| Cache miss | `cache`, `expand`, `embed`, `search`, `rerank`, `providers`, `total` | one INFO line: `recommend miss timings cache=…ms expand=…ms embed=…ms search=…ms rerank=…ms providers=…ms total=…ms` |
+| Cache miss | `cache`, `expand`, `embed`, `search`, `rerank`, `providers`, `total` | one INFO line: `recommend miss timings cache=…ms expand=…ms embed=…ms search=…ms rerank=…ms providers=…ms rerank_in=… rerank_out=… total=…ms`. `rerank_in` / `rerank_out` are Anthropic token counts from the rerank call, not milliseconds. |
 
 `app` loggers are INFO and the root logger is WARNING, so third-party INFO lines stay quiet and the miss line still shows up. A failure in expansion, embed, or rerank is a 500: no `Server-Timing` header, no timing line, and the result is not cached. The frontend does not read the header.
 

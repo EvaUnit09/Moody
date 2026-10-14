@@ -54,15 +54,11 @@ from app.config import settings  # noqa: E402
 QUERIES_PATH = Path(__file__).with_name("mood_queries.json")
 MOOD_QUERIES: list[str] = json.loads(QUERIES_PATH.read_text())
 
-# Distinct " v{n}" suffixes for the miss path. Distinct miss keys top out at
-# len(MOOD_QUERIES) * MISS_POOL, which caps Claude/OpenAI spend on long runs.
 MISS_POOL = max(1, int(os.getenv("MOODY_MISS_POOL", "20")))
 MISS_RATE = 0.30
 EXCLUDE_RATE = 0.15
+MISS_EXCLUDE_BASE = 2_000_000_000
 
-# The cache key includes the sorted exclude ids, so a random subset is a new
-# key every call and always misses. A mood maps to one fixed preset instead,
-# so repeat requests for it can still hit.
 EXCLUDE_PRESETS: list[list[int]] = [[550], [680, 13], [155]]
 
 # Pre-warm: the "hit" stat is by intent, and on a cold service the first request
@@ -125,17 +121,17 @@ class MoodyUser(HttpUser):
     @task(7)
     def recommend(self) -> None:
         base_query = random.choice(MOOD_QUERIES)
-        if random.random() < MISS_RATE:
-            query = f"{base_query} v{random.randrange(MISS_POOL)}"[:200]
-            stat_name = "/recommend miss"
-        else:
-            query = base_query
-            stat_name = "/recommend hit"
+        is_miss = random.random() < MISS_RATE
+        stat_name = "/recommend miss" if is_miss else "/recommend hit"
 
-        body: dict = {"query": query, "region": "US"}
+        body: dict = {"query": base_query, "region": "US"}
+        exclude_ids: list[int] = []
         if random.random() < EXCLUDE_RATE:
-            # Hash the unsuffixed mood so "x" and "x v3" share one preset.
-            body["exclude_tmdb_ids"] = _exclude_preset(base_query)
+            exclude_ids.extend(_exclude_preset(base_query))
+        if is_miss:
+            exclude_ids.append(MISS_EXCLUDE_BASE + random.randrange(MISS_POOL))
+        if exclude_ids:
+            body["exclude_tmdb_ids"] = exclude_ids
 
         with self.client.post(
             "/recommend",
