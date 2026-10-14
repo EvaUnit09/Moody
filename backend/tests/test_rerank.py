@@ -198,9 +198,24 @@ class TestRerankTokenLogging:
         ):
             await rerank("a quiet evening", CANDIDATES, timer=timer)
 
-        assert "rerank tokens input=100 output=40" in caplog.text
+        assert "rerank tokens" not in caplog.text
         assert "rerank_in=100" in timer.log_line()
         assert "rerank_out=40" in timer.log_line()
+
+    @pytest.mark.asyncio
+    async def test_logs_tokens_when_no_timer(self, caplog):
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(
+            return_value=_mock_message([{"tmdb_id": 1, "reason": "Fits."}])
+        )
+
+        with (
+            caplog.at_level(logging.INFO, logger="app.services.rerank"),
+            patch("app.services.rerank._get_client", return_value=mock_client),
+        ):
+            await rerank("a quiet evening", CANDIDATES)
+
+        assert "rerank tokens input=100 output=40" in caplog.text
 
     @pytest.mark.asyncio
     async def test_empty_candidates_do_not_log_tokens(self, caplog):

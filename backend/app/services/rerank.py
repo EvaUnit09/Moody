@@ -107,10 +107,11 @@ def _record_token_usage(message: object, timer: StageTimer | None) -> None:
     output_tokens = getattr(usage, "output_tokens", None)
     if input_tokens is None or output_tokens is None:
         return
-    logger.info("rerank tokens input=%s output=%s", input_tokens, output_tokens)
     if timer is not None:
         timer.extra("rerank_in", input_tokens)
         timer.extra("rerank_out", output_tokens)
+        return
+    logger.info("rerank tokens input=%s output=%s", input_tokens, output_tokens)
 
 
 @DatadogObservability.trace_llm_rerank
