@@ -60,6 +60,25 @@
   justify-content: center;
 }
 
+.mood-groups {
+  margin-bottom: var(--space-6);
+}
+
+.mood-groups .mood-chips {
+  justify-content: flex-start;
+  margin-bottom: 0;
+}
+
+.mood-group + .mood-group {
+  margin-top: var(--space-6);
+}
+
+.mood-group .recent-moods-label {
+  display: block;
+  margin: 0 0 var(--space-3);
+  padding: 0 var(--space-2);
+}
+
 .mood-chip {
   cursor: pointer;
   background: transparent;

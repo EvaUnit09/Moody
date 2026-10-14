@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
+import { MOOD_GROUPS } from "../lib/moodGroups";
 import { MoodChips } from "./MoodChips";
 
 describe("MoodChips", () => {
@@ -36,6 +37,27 @@ describe("MoodChips", () => {
 
     expect(onMoodSelect).toHaveBeenCalledWith("date night");
     expect(onMoodSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders Quiet, Warm, and Wired in order and selects every grouped mood", async () => {
+    const user = userEvent.setup();
+    const onMoodSelect = vi.fn();
+    render(<MoodChips onMoodSelect={onMoodSelect} />);
+
+    expect(screen.getAllByRole("heading").map((heading) => heading.textContent)).toEqual([
+      "Quiet",
+      "Warm",
+      "Wired",
+    ]);
+
+    let call = 0;
+    for (const group of MOOD_GROUPS) {
+      for (const mood of group.moods) {
+        call += 1;
+        await user.click(screen.getByRole("button", { name: `Search for ${mood} movies` }));
+        expect(onMoodSelect).toHaveBeenNthCalledWith(call, mood);
+      }
+    }
   });
 
   it("disables all chips when disabled prop is true", () => {
