@@ -54,19 +54,11 @@ from app.config import settings  # noqa: E402
 QUERIES_PATH = Path(__file__).with_name("mood_queries.json")
 MOOD_QUERIES: list[str] = json.loads(QUERIES_PATH.read_text())
 
-# Distinct miss keys top out at len(MOOD_QUERIES) * MISS_POOL, which caps
-# Claude/OpenAI spend on long runs. Misses bust the cache with a sentinel
-# exclude id instead of appending a word, so should_expand still sees the
-# typed mood.
 MISS_POOL = max(1, int(os.getenv("MOODY_MISS_POOL", "20")))
 MISS_RATE = 0.30
 EXCLUDE_RATE = 0.15
-# TMDB ids in this range are not real titles, so the filter is a no-op.
 MISS_EXCLUDE_BASE = 2_000_000_000
 
-# The cache key includes the sorted exclude ids, so a random subset is a new
-# key every call and always misses. A mood maps to one fixed preset instead,
-# so repeat requests for it can still hit.
 EXCLUDE_PRESETS: list[list[int]] = [[550], [680, 13], [155]]
 
 # Pre-warm: the "hit" stat is by intent, and on a cold service the first request
