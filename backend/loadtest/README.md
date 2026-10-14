@@ -6,7 +6,7 @@ Simulates users typing mood queries against `POST /recommend`, plus lighter
 ## Files
 
 - `mood_queries.json` — 100 mood / scenario strings (1–200 chars, matching the API)
-- `locustfile.py` — Locust user. 70% of recommend calls reuse the pool (cache hits), 30% append ` v{n}` from a pool of 20 (cache misses). 15% send a fixed `exclude_tmdb_ids` preset chosen from the base query. Locust stats are `/recommend hit` and `/recommend miss`.
+- `locustfile.py` — Locust user. 70% of recommend calls reuse the pool (cache hits). 30% miss by sending a sentinel `exclude_tmdb_ids` value (`2000000000 + n` from a pool of 20) so the mood text and its word count stay as typed. 15% also send a fixed exclude preset chosen from the base query. Locust stats are `/recommend hit` and `/recommend miss`.
 
 ## Before you run
 
@@ -21,7 +21,7 @@ Suggested headless shape: `-u 4 -r 1 -t 2m` (about 60–80 recommend/min, near t
 1. Deploy a test branch with temporarily raised rate limits (production uses `10/minute`).
 2. Deploy that branch to a Railway environment you can afford to hammer.
 3. Point `MOODY_HOST` at that service and set `MOODY_ALLOW_PROD=1` to bypass the host guard.
-4. Each cache-miss recommend calls Claude (expand + rerank) and OpenAI (embed). Cost scales with unique queries. `MOODY_MISS_POOL` (default 20) caps miss suffixes, so the distinct miss keys stop at `100 queries × pool size`. A fresh service has a cold cache, so the file pre-warms before the run (see below).
+4. Each cache-miss recommend calls Claude (expand + rerank) and OpenAI (embed). Cost scales with unique queries. `MOODY_MISS_POOL` (default 20) caps sentinel exclude ids, so the distinct miss keys stop at `100 queries × pool size`. A fresh service has a cold cache, so the file pre-warms before the run (see below).
 
 A high-VU run against the production URL mostly collects 429s and still pays for whatever misses get through.
 

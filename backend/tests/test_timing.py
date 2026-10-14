@@ -57,3 +57,18 @@ class TestStageTimer:
 
         assert "providers=" in line
         assert "total=" in line
+
+    def test_extra_fields_join_the_log_line_not_server_timing(self):
+        timer = StageTimer()
+        with timer.stage("rerank"):
+            pass
+        timer.extra("rerank_in", 1800)
+        timer.extra("rerank_out", 220)
+
+        line = timer.log_line()
+        header = timer.server_timing_header()
+
+        assert "rerank_in=1800" in line
+        assert "rerank_out=220" in line
+        assert "rerank_in" not in header
+        assert "rerank_out" not in header

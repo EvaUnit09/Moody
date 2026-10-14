@@ -8,6 +8,7 @@ Tests cover:
 - Truncating results to TOP_N even if the model returns more
 """
 
+import logging
 import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -18,7 +19,8 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("SUPABASE_DB_URL", "postgresql://test:test@localhost/test")
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 
-from app.services.rerank import TOP_N, rerank
+from app.services.rerank import TOP_N, _record_token_usage, rerank
+from app.services.timing import StageTimer
 
 CANDIDATES = [
     {"tmdb_id": 1, "title": "Movie One", "overview": "A quiet drama."},
@@ -179,3 +181,41 @@ class TestRerankTokenBudget:
             await rerank("rainy day", CANDIDATES)
 
         assert mock_client.messages.create.call_args.kwargs["max_tokens"] == RERANK_MAX_TOKENS
+
+
+class TestRerankTokenLogging:
+    @pytest.mark.asyncio
+    async def test_logs_usage_and_annotates_timer(self, caplog):
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(
+            return_value=_mock_message([{"tmdb_id": 1, "reason": "Fits."}])
+        )
+        timer = StageTimer()
+
+        with (
+            caplog.at_level(logging.INFO, logger="app.services.rerank"),
+            patch("app.services.rerank._get_client", return_value=mock_client),
+        ):
+            await rerank("a quiet evening", CANDIDATES, timer=timer)
+
+        assert "rerank tokens input=100 output=40" in caplog.text
+        assert "rerank_in=100" in timer.log_line()
+        assert "rerank_out=40" in timer.log_line()
+
+    @pytest.mark.asyncio
+    async def test_empty_candidates_do_not_log_tokens(self, caplog):
+        mock_client = AsyncMock()
+        with (
+            caplog.at_level(logging.INFO, logger="app.services.rerank"),
+            patch("app.services.rerank._get_client", return_value=mock_client),
+        ):
+            await rerank("a quiet evening", [], timer=StageTimer())
+
+        assert "rerank tokens" not in caplog.text
+        mock_client.messages.create.assert_not_awaited()
+
+    def test_record_token_usage_skips_when_usage_missing(self):
+        timer = StageTimer()
+        _record_token_usage(SimpleNamespace(usage=None), timer)
+
+        assert "rerank_in" not in timer.log_line()

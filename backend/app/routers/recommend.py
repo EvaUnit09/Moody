@@ -117,7 +117,7 @@ async def recommend(body: RecommendRequest, request: Request, response: Response
         logger.debug(f"Filtered {len(exclude_ids)} excluded IDs, {len(candidates)} candidates remain")
     
     with timer.stage("rerank"):
-        results = await rerank(query, candidates)
+        results = await rerank(query, candidates, timer=timer)
     
     # Enrich results with watch providers (async batch with concurrency control)
     semaphore = asyncio.Semaphore(WatchProviderService.MAX_CONCURRENT_REQUESTS)
