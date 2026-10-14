@@ -170,6 +170,11 @@ class TestRateLimiting:
         from app.routers.recommend import limiter
         limiter._storage.storage.clear()
 
+    def test_default_recommend_rate_limit_is_ten_per_minute(self):
+        from app.routers.recommend import RECOMMEND_RATE_LIMIT
+
+        assert RECOMMEND_RATE_LIMIT == "10/minute"
+
     def test_rate_limit_exceeded(self):
         """Bursting /recommend should return 429."""
         client = TestClient(app)
