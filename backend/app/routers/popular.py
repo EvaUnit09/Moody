@@ -1,7 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app import cache
-from app.db import get_popular_movies
+from app.db import PoolAcquireTimeout, get_popular_movies
 from app.models import PopularResponse
 
 router = APIRouter()
@@ -22,5 +22,8 @@ async def popular() -> PopularResponse:
     if cached is not None:
         return PopularResponse(results=cached)
 
-    movies = await warm_popular_cache()
+    try:
+        movies = await warm_popular_cache()
+    except PoolAcquireTimeout as exc:
+        raise HTTPException(status_code=503, detail="Database busy, try again shortly") from exc
     return PopularResponse(results=movies)

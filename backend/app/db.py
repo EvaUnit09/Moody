@@ -18,13 +18,24 @@ class PoolAcquireTimeout(Exception):
     pass
 
 
+def _terminate_pool(pool: asyncpg.Pool | None) -> None:
+    if pool is None:
+        return
+    try:
+        pool.terminate()
+    except Exception:
+        pass
+
+
 def _bind_to_running_loop() -> asyncio.Lock:
     global _pool, _pool_lock, _pool_loop_id
     loop_id = id(asyncio.get_running_loop())
     if _pool_loop_id != loop_id:
+        old_pool = _pool
         _pool = None
         _pool_lock = asyncio.Lock()
         _pool_loop_id = loop_id
+        _terminate_pool(old_pool)
     lock = _pool_lock
     if lock is None:
         lock = asyncio.Lock()
@@ -68,11 +79,15 @@ async def close_pool() -> None:
 @asynccontextmanager
 async def _connection():
     pool = await get_pool()
+    acquired = False
     try:
         async with pool.acquire(timeout=settings.db_pool_acquire_timeout) as conn:
+            acquired = True
             yield conn
     except TimeoutError as exc:
-        raise PoolAcquireTimeout from exc
+        if not acquired:
+            raise PoolAcquireTimeout from exc
+        raise
 
 
 def _with_genres(rows: list[asyncpg.Record]) -> list[dict]:
@@ -96,7 +111,7 @@ async def search_similar(embedding: list[float], limit: int = 25) -> list[dict]:
             where vote_average >= $3
             order by embedding_half <=> $1
             limit $2
-        """,
+            """,
             embedding,
             limit,
             MIN_VOTE_AVERAGE,
@@ -114,7 +129,7 @@ async def get_popular_movies(limit: int = 15) -> list[dict]:
             where vote_count >= 100 and vote_average >= $2
             order by popularity desc
             limit $1
-        """,
+            """,
             limit,
             MIN_VOTE_AVERAGE,
         )

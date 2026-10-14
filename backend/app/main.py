@@ -20,6 +20,7 @@ from app.services.tmdb import close_http_client
 # our own app.* loggers emit INFO, e.g. the per-stage /recommend miss timings.
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logging.getLogger("app").setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
 POPULAR_CACHE_REFRESH_SECONDS = 3300  # keep the cache warm ahead of its 3600s TTL
 
@@ -27,7 +28,12 @@ POPULAR_CACHE_REFRESH_SECONDS = 3300  # keep the cache warm ahead of its 3600s T
 async def _refresh_popular_cache_periodically() -> None:
     while True:
         await asyncio.sleep(POPULAR_CACHE_REFRESH_SECONDS)
-        await warm_popular_cache()
+        try:
+            await warm_popular_cache()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("popular cache refresh failed")
 
 
 @asynccontextmanager

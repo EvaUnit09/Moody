@@ -2,16 +2,23 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from app import db
 from app.config import Settings
+
+_POOLER_URL = "postgresql://user:pass@pooler:5432/postgres"
 
 
 @pytest.fixture
 def reset_pool():
     db._pool = None
+    db._pool_lock = None
+    db._pool_loop_id = None
     yield
     db._pool = None
+    db._pool_lock = None
+    db._pool_loop_id = None
 
 
 async def _contend_for_pool():
@@ -76,6 +83,25 @@ async def test_connection_raises_pool_acquire_timeout():
         with pytest.raises(db.PoolAcquireTimeout):
             async with db._connection():
                 pass
+
+
+@pytest.mark.asyncio
+async def test_connection_propagates_query_timeout():
+    class HeldPool:
+        def acquire(self, **kwargs):
+            class _Acquire:
+                async def __aenter__(self):
+                    return object()
+
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
+
+            return _Acquire()
+
+    with patch.object(db, "get_pool", new=AsyncMock(return_value=HeldPool())):
+        with pytest.raises(TimeoutError, match="command timeout"):
+            async with db._connection():
+                raise TimeoutError("command timeout")
 
 
 @pytest.mark.asyncio
@@ -147,9 +173,76 @@ async def test_close_pool_closes_and_clears(reset_pool):
 
 
 def test_direct_url_falls_back_to_pooler_url():
-    pooler = "postgresql://user:pass@pooler:5432/postgres"
     direct = "postgresql://user:pass@db:5432/postgres"
-    fallback = Settings(supabase_db_url=pooler)
-    assert fallback.supabase_index_url == pooler
-    preferred = Settings(supabase_db_url=pooler, supabase_db_direct_url=direct)
+    fallback = Settings(supabase_db_url=_POOLER_URL)
+    assert fallback.supabase_index_url == _POOLER_URL
+    preferred = Settings(supabase_db_url=_POOLER_URL, supabase_db_direct_url=direct)
     assert preferred.supabase_index_url == direct
+
+
+def test_loop_change_terminates_previous_pool(reset_pool):
+    class FakePool:
+        def __init__(self):
+            self.terminated = False
+
+        def terminate(self):
+            self.terminated = True
+
+    first = FakePool()
+
+    async def seed():
+        db._pool = first
+        db._pool_lock = asyncio.Lock()
+        db._pool_loop_id = id(asyncio.get_running_loop())
+
+    async def rebind():
+        db._bind_to_running_loop()
+        assert first.terminated is True
+        assert db._pool is None
+
+    asyncio.run(seed())
+    asyncio.run(rebind())
+
+
+def test_loop_change_swallows_terminate_errors(reset_pool):
+    class BoomPool:
+        def terminate(self):
+            raise RuntimeError("already closed")
+
+    async def seed():
+        db._pool = BoomPool()
+        db._pool_lock = asyncio.Lock()
+        db._pool_loop_id = id(asyncio.get_running_loop())
+
+    async def rebind():
+        db._bind_to_running_loop()
+        assert db._pool is None
+
+    asyncio.run(seed())
+    asyncio.run(rebind())
+
+
+def test_settings_pool_defaults_and_test_min_zero():
+    defaults = Settings(supabase_db_url=_POOLER_URL)
+    assert defaults.db_pool_min_size == 1
+    assert defaults.db_pool_max_size == 2
+    assert defaults.db_command_timeout == 30.0
+    assert defaults.db_pool_acquire_timeout == 5.0
+    test_like = Settings(supabase_db_url=_POOLER_URL, db_pool_min_size=0)
+    assert test_like.db_pool_min_size == 0
+    assert test_like.db_pool_max_size == 2
+
+
+@pytest.mark.parametrize(
+    "overrides,match",
+    [
+        ({"db_pool_min_size": -1}, "greater than or equal to 0"),
+        ({"db_pool_max_size": 0}, "greater than or equal to 1"),
+        ({"db_command_timeout": 0}, "greater than 0"),
+        ({"db_pool_acquire_timeout": -1}, "greater than 0"),
+        ({"db_pool_min_size": 3, "db_pool_max_size": 2}, "must be <="),
+    ],
+)
+def test_settings_reject_invalid_pool_bounds(overrides, match):
+    with pytest.raises(ValidationError, match=match):
+        Settings(supabase_db_url=_POOLER_URL, **overrides)

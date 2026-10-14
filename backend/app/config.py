@@ -1,3 +1,6 @@
+from typing import Self
+
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,10 +10,10 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None  # Optional: only needed for embeddings and /recommend
     supabase_db_url: str
     supabase_db_direct_url: str | None = None
-    db_pool_min_size: int = 1
-    db_pool_max_size: int = 2
-    db_command_timeout: float = 30.0
-    db_pool_acquire_timeout: float = 5.0
+    db_pool_min_size: int = Field(default=1, ge=0)
+    db_pool_max_size: int = Field(default=2, ge=1)
+    db_command_timeout: float = Field(default=30.0, gt=0)
+    db_pool_acquire_timeout: float = Field(default=5.0, gt=0)
     db_application_name: str = "moody"
     anthropic_api_key: str | None = None  # Optional: only needed for /recommend reranking
     allowed_origins: str = (
@@ -29,6 +32,15 @@ class Settings(BaseSettings):
     dd_trace_enabled: bool = False
     dd_trace_agent_url: str | None = None  # Override agent URL (for local development with agent)
     moody_host: str | None = None
+
+    @model_validator(mode="after")
+    def pool_min_le_max(self) -> Self:
+        if self.db_pool_min_size > self.db_pool_max_size:
+            raise ValueError(
+                f"db_pool_min_size ({self.db_pool_min_size}) must be <= "
+                f"db_pool_max_size ({self.db_pool_max_size})"
+            )
+        return self
 
     @property
     def allowed_origins_list(self) -> list[str]:
