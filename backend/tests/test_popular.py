@@ -54,11 +54,16 @@ async def test_refresh_popular_cache_continues_after_timeout():
 
 @pytest.mark.asyncio
 async def test_refresh_popular_cache_propagates_cancelled_error():
-    async def cancel(_seconds):
-        raise asyncio.CancelledError()
+    async def once(_seconds):
+        return None
 
     with (
-        patch("app.main.asyncio.sleep", side_effect=cancel),
+        patch("app.main.asyncio.sleep", side_effect=once),
+        patch(
+            "app.main.warm_popular_cache",
+            new_callable=AsyncMock,
+            side_effect=asyncio.CancelledError,
+        ),
         patch("app.main.logger.exception") as log_exc,
     ):
         with pytest.raises(asyncio.CancelledError):

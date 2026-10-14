@@ -180,7 +180,8 @@ def test_direct_url_falls_back_to_pooler_url():
     assert preferred.supabase_index_url == direct
 
 
-def test_loop_change_terminates_previous_pool(reset_pool):
+@pytest.mark.asyncio
+async def test_loop_change_terminates_previous_pool(reset_pool):
     class FakePool:
         def __init__(self):
             self.terminated = False
@@ -189,37 +190,45 @@ def test_loop_change_terminates_previous_pool(reset_pool):
             self.terminated = True
 
     first = FakePool()
-
-    async def seed():
-        db._pool = first
-        db._pool_lock = asyncio.Lock()
-        db._pool_loop_id = id(asyncio.get_running_loop())
-
-    async def rebind():
-        db._bind_to_running_loop()
-        assert first.terminated is True
-        assert db._pool is None
-
-    asyncio.run(seed())
-    asyncio.run(rebind())
+    db._pool = first
+    db._pool_lock = asyncio.Lock()
+    db._pool_loop_id = -1
+    db._bind_to_running_loop()
+    assert first.terminated is True
+    assert db._pool is None
 
 
-def test_loop_change_swallows_terminate_errors(reset_pool):
+@pytest.mark.asyncio
+async def test_loop_change_swallows_terminate_errors(reset_pool):
     class BoomPool:
         def terminate(self):
             raise RuntimeError("already closed")
 
-    async def seed():
-        db._pool = BoomPool()
-        db._pool_lock = asyncio.Lock()
-        db._pool_loop_id = id(asyncio.get_running_loop())
+    db._pool = BoomPool()
+    db._pool_lock = asyncio.Lock()
+    db._pool_loop_id = -1
+    db._bind_to_running_loop()
+    assert db._pool is None
 
-    async def rebind():
-        db._bind_to_running_loop()
-        assert db._pool is None
 
-    asyncio.run(seed())
-    asyncio.run(rebind())
+@pytest.mark.asyncio
+async def test_close_pool_terminates_when_loop_mismatches(reset_pool):
+    class FakePool:
+        def __init__(self):
+            self.terminated = False
+
+        def terminate(self):
+            self.terminated = True
+
+        async def close(self):
+            raise AssertionError("close should not run on a dead loop")
+
+    pool = FakePool()
+    db._pool = pool
+    db._pool_loop_id = -1
+    await db.close_pool()
+    assert pool.terminated is True
+    assert db._pool is None
 
 
 def test_settings_pool_defaults_and_test_min_zero():
