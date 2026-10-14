@@ -6,6 +6,9 @@ class Settings(BaseSettings):
 
     openai_api_key: str | None = None  # Optional: only needed for embeddings and /recommend
     supabase_db_url: str
+    db_pool_min_size: int = 1
+    db_pool_max_size: int = 2
+    db_application_name: str = "moody"
     anthropic_api_key: str | None = None  # Optional: only needed for /recommend reranking
     allowed_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"

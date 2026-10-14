@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 
 import asyncpg
@@ -8,15 +9,24 @@ from app.services.observability import DatadogObservability
 from app.services.tmdb import MIN_VOTE_AVERAGE, genre_names
 
 _pool: asyncpg.Pool | None = None
+_pool_lock = asyncio.Lock()
 
 
 async def get_pool() -> asyncpg.Pool:
     global _pool
-    if _pool is None:
+    if _pool is not None:
+        return _pool
+    async with _pool_lock:
+        if _pool is not None:
+            return _pool
         _pool = await asyncpg.create_pool(
-            settings.supabase_db_url, init=register_vector
+            settings.supabase_db_url,
+            init=register_vector,
+            min_size=settings.db_pool_min_size,
+            max_size=settings.db_pool_max_size,
+            server_settings={"application_name": settings.db_application_name},
         )
-    return _pool
+        return _pool
 
 
 async def close_pool() -> None:

@@ -83,5 +83,31 @@ The recommend cache and the popular cache are process-local. A GitHub Actions in
 
 Catalog order, quotas, and the `psycopg2` gap in `create_index.py` are in [docs/catalog.md](../docs/catalog.md). CI uses Python 3.12 (`requires-python >= 3.11`), `ruff check app`, and `pytest`.
 
+## Connection budget
+
+`SUPABASE_DB_URL` is the Supabase **session** pooler (`*.pooler.supabase.com`, port **5432**). Session mode pins one Postgres backend to each client. This project's pooler `pool_size` is **15**. Client 16 raises `asyncpg.exceptions.InternalServerError: (EMAXCONNSESSION) max clients reached in session mode`.
+
+`get_pool()` in `app/db.py` creates one process-wide asyncpg pool, guarded by a lock so concurrent callers share it. Lifespan opens it on startup and `close_pool()` closes it on shutdown. Scripts that open the pool (`ingest_popular.py`, `build_embeddings.py`, `run_eval.py`, `test_retrieval.py`) close it before exit.
+
+| Knob | Default | Env |
+| --- | --- | --- |
+| Idle connections per process | 1 | `DB_POOL_MIN_SIZE` |
+| Connections per process under load | 2 | `DB_POOL_MAX_SIZE` |
+| `pg_stat_activity.application_name` | `moody` | `DB_APPLICATION_NAME` |
+
+Slots in use at peak:
+
+```
+(replicas × uvicorn workers × DB_POOL_MAX_SIZE)  for each Railway service
++ ingest/eval/index scripts (each is another process with the same max)
++ 1 to 2 for the Supabase dashboard
+```
+
+Keep that sum **under 15**. TEST and production share this pooler, so count both. The Procfile starts one uvicorn worker (no `--workers` / `WEB_CONCURRENCY`).
+
+Do **not** point `SUPABASE_DB_URL` at the transaction pooler (port **6543**) for this app. Transaction mode multiplexes clients, but asyncpg prepared statements and the pgvector codec need a session. To use 6543 you would set `statement_cache_size=0`, and `LISTEN` would still not work. A 1 to 2 connection session pool fits the 15-slot cap, so session mode stays.
+
+If you add replicas or workers, lower `DB_POOL_MAX_SIZE` until the formula fits. Set `DB_APPLICATION_NAME` to `moody-test` or `moody-production` so `pg_stat_activity` shows which service holds a slot.
+
 See the [root README](../README.md) for the full project overview and
 [docs/architecture.md](../docs/architecture.md) for stack decisions.

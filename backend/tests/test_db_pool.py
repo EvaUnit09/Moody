@@ -27,10 +27,12 @@ async def test_get_pool_is_a_singleton_under_concurrency(reset_pool):
 
     with patch.object(db.asyncpg, "create_pool", side_effect=fake_create_pool):
         pools = await asyncio.gather(*[db.get_pool() for _ in range(8)])
+        again = await db.get_pool()
 
     assert create_calls == 1
     assert len({id(pool) for pool in pools}) == 1
     assert pools[0] is db._pool
+    assert again is pools[0]
 
 
 @pytest.mark.asyncio
@@ -97,3 +99,20 @@ async def test_update_popularity_releases_connection_on_error(reset_pool):
 
     assert pool.in_use == 0
     assert pool.releases == 1
+
+
+@pytest.mark.asyncio
+async def test_close_pool_closes_and_clears(reset_pool):
+    closed = False
+
+    class FakePool:
+        async def close(self):
+            nonlocal closed
+            closed = True
+
+    db._pool = FakePool()
+    await db.close_pool()
+    assert closed is True
+    assert db._pool is None
+    await db.close_pool()
+    assert db._pool is None
