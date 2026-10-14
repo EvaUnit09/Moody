@@ -1,7 +1,12 @@
 import asyncio
+import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
+os.environ.setdefault("OPENAI_API_KEY", "test-key")
+os.environ.setdefault("SUPABASE_DB_URL", "postgresql://test:test@localhost/test")
+os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 
 from app import db
 

@@ -3,7 +3,17 @@ Pytest configuration and fixtures for backend tests.
 """
 
 import os
+
 import pytest
+
+# Must run at import. A session fixture runs after collection, and several
+# tests import app.config.Settings at module level.
+os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
+os.environ.setdefault("SUPABASE_DB_URL", "postgresql://test:test@localhost:5432/test")
+os.environ.setdefault("ANTHROPIC_API_KEY", "test-anthropic-key")
+os.environ.setdefault("TMDB_API_READ_TOKEN", "test-tmdb-token")
+os.environ.setdefault("DD_TRACE_ENABLED", "false")
+os.environ.setdefault("DD_API_KEY", "")
 
 
 @pytest.fixture(scope="session", autouse=True)
