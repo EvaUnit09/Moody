@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from slowapi import Limiter
 
 from app import cache
-from app.db import search_similar
+from app.db import PoolAcquireTimeout, search_similar
 from app.models import RecommendRequest, RecommendResponse, WatchProvider
 from app.services.embeddings import embed_text
 from app.services.query_intent import expand_query
@@ -107,8 +107,11 @@ async def recommend(body: RecommendRequest, request: Request, response: Response
         search_query = await expand_query(query)
     with timer.stage("embed"):
         embedding = await embed_text(search_query)
-    with timer.stage("search"):
-        candidates = await search_similar(embedding, limit=CANDIDATE_LIMIT)
+    try:
+        with timer.stage("search"):
+            candidates = await search_similar(embedding, limit=CANDIDATE_LIMIT)
+    except PoolAcquireTimeout as exc:
+        raise HTTPException(status_code=503, detail="Database busy, try again shortly") from exc
     
     # Filter out excluded tmdb_ids before reranking
     if exclude_ids:

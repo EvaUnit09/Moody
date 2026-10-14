@@ -29,7 +29,7 @@ import sys
 
 import httpx
 
-from app.db import get_pool, update_popularity
+from app.db import close_pool, update_popularity
 from app.services.tmdb import BASE_URL, HEADERS, MIN_VOTE_AVERAGE
 
 # Fetch top N pages from each endpoint to capture ~100-200 movies total
@@ -139,12 +139,13 @@ async def ingest_popular() -> int:
     
     # Step 3: Update popularity in database (preserves keywords and embeddings)
     try:
-        await get_pool()  # Ensure pool is initialized
         updated = await update_popularity(movies)
         print(f"Successfully updated popularity for {updated} movies")
     except Exception as e:
         print(f"Database update failed: {e}")
         return 2
+    finally:
+        await close_pool()
     
     print("=== Ingest complete ===")
     print("Note: GitHub Actions cannot bust Railway's cache (process-local).")

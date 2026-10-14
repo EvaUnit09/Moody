@@ -460,3 +460,36 @@ class TestServerTiming:
         header = response.headers["Server-Timing"]
         assert "cache;dur=" in header
         assert "rerank" not in header
+
+
+@pytest.mark.asyncio
+async def test_recommend_returns_503_on_pool_acquire_timeout():
+    from unittest.mock import Mock
+
+    from fastapi import HTTPException, Request
+
+    from app.db import PoolAcquireTimeout
+    from app.models import RecommendRequest
+    from app.routers.recommend import recommend
+
+    request = Mock(spec=Request)
+    request.client = Mock()
+    request.client.host = "127.0.0.1"
+    request.headers = {}
+    body = RecommendRequest(query="pool acquire timeout test", region="US")
+    cache._cache.pop(cache.build_cache_key("pool acquire timeout test:US"), None)
+
+    with (
+        patch("app.routers.recommend.expand_query", new_callable=AsyncMock, return_value="q"),
+        patch("app.routers.recommend.embed_text", new_callable=AsyncMock, return_value=[0.1] * 1536),
+        patch(
+            "app.routers.recommend.search_similar",
+            new_callable=AsyncMock,
+            side_effect=PoolAcquireTimeout,
+        ),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await recommend(body, request, Response())
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Database busy, try again shortly"

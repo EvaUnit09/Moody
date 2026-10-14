@@ -54,4 +54,4 @@ Genre names come from the hardcoded `GENRE_MAP` in `tmdb.py`. Unknown ids are dr
 
 `sql/schema.sql` creates `movies_embedding_half_hnsw_idx` on `embedding_half` with `halfvec_cosine_ops` (`m = 16`, `ef_construction = 64`). Search orders by `embedding_half <=> $1` and drops rows under `vote_average` 5.0.
 
-`app/scripts/create_index.py` runs the same `CREATE INDEX IF NOT EXISTS` with a 10-minute statement timeout. It imports `psycopg2`, which is not in `requirements.txt`. Prefer the SQL file. Re-running either path is a no-op once the index exists.
+`app/scripts/create_index.py` runs the same `CREATE INDEX IF NOT EXISTS` with a 10-minute statement timeout. It imports `psycopg2`, which is not in `requirements.txt`. Set `SUPABASE_DB_DIRECT_URL` to the direct Postgres URL so the build does not hold a session-pooler slot. If that env is unset, the script uses `SUPABASE_DB_URL`. Prefer the SQL file. Re-running either path is a no-op once the index exists.

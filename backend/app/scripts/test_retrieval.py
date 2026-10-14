@@ -32,7 +32,7 @@ async def test_retrieval() -> None:
             print(f"   {overview}")
 
     
-    await close_pool
+    await close_pool()
 
 
 if __name__ == "__main__":
