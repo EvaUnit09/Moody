@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import logging
 from contextlib import asynccontextmanager
 
 import asyncpg
@@ -9,9 +10,11 @@ from app.config import settings
 from app.services.observability import DatadogObservability
 from app.services.tmdb import MIN_VOTE_AVERAGE, genre_names
 
+logger = logging.getLogger(__name__)
+
 _pool: asyncpg.Pool | None = None
 _pool_lock: asyncio.Lock | None = None
-_pool_loop_id: int | None = None
+_pool_loop: asyncio.AbstractEventLoop | None = None
 
 
 class PoolAcquireTimeout(Exception):
@@ -24,17 +27,17 @@ def _terminate_pool(pool: asyncpg.Pool | None) -> None:
     try:
         pool.terminate()
     except Exception:
-        pass
+        logger.exception("failed to terminate stale asyncpg pool")
 
 
 def _bind_to_running_loop() -> asyncio.Lock:
-    global _pool, _pool_lock, _pool_loop_id
-    loop_id = id(asyncio.get_running_loop())
-    if _pool_loop_id != loop_id:
+    global _pool, _pool_lock, _pool_loop
+    loop = asyncio.get_running_loop()
+    if _pool_loop is not loop:
         old_pool = _pool
         _pool = None
         _pool_lock = asyncio.Lock()
-        _pool_loop_id = loop_id
+        _pool_loop = loop
         _terminate_pool(old_pool)
     lock = _pool_lock
     if lock is None:
@@ -67,8 +70,7 @@ async def close_pool() -> None:
     pool = _pool
     if pool is None:
         return
-    loop_id = id(asyncio.get_running_loop())
-    if _pool_loop_id is not None and _pool_loop_id != loop_id:
+    if _pool_loop is not None and _pool_loop is not asyncio.get_running_loop():
         _bind_to_running_loop()
         return
     await pool.close()

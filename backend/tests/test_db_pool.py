@@ -14,11 +14,16 @@ _POOLER_URL = "postgresql://user:pass@pooler:5432/postgres"
 def reset_pool():
     db._pool = None
     db._pool_lock = None
-    db._pool_loop_id = None
+    db._pool_loop = None
     yield
     db._pool = None
     db._pool_lock = None
-    db._pool_loop_id = None
+    db._pool_loop = None
+
+
+class _DummyPool:
+    def terminate(self):
+        pass
 
 
 async def _contend_for_pool():
@@ -28,7 +33,7 @@ async def _contend_for_pool():
         nonlocal create_calls
         create_calls += 1
         await asyncio.sleep(0.05)
-        return object()
+        return _DummyPool()
 
     with patch.object(db.asyncpg, "create_pool", side_effect=fake_create_pool):
         pools = await asyncio.gather(*[db.get_pool() for _ in range(8)])
@@ -164,7 +169,7 @@ async def test_close_pool_closes_and_clears(reset_pool):
             closed = True
 
     db._pool = FakePool()
-    db._pool_loop_id = id(asyncio.get_running_loop())
+    db._pool_loop = asyncio.get_running_loop()
     await db.close_pool()
     assert closed is True
     assert db._pool is None
@@ -192,7 +197,7 @@ async def test_loop_change_terminates_previous_pool(reset_pool):
     first = FakePool()
     db._pool = first
     db._pool_lock = asyncio.Lock()
-    db._pool_loop_id = -1
+    db._pool_loop = object()
     db._bind_to_running_loop()
     assert first.terminated is True
     assert db._pool is None
@@ -206,7 +211,7 @@ async def test_loop_change_swallows_terminate_errors(reset_pool):
 
     db._pool = BoomPool()
     db._pool_lock = asyncio.Lock()
-    db._pool_loop_id = -1
+    db._pool_loop = object()
     db._bind_to_running_loop()
     assert db._pool is None
 
@@ -225,7 +230,7 @@ async def test_close_pool_terminates_when_loop_mismatches(reset_pool):
 
     pool = FakePool()
     db._pool = pool
-    db._pool_loop_id = -1
+    db._pool_loop = object()
     await db.close_pool()
     assert pool.terminated is True
     assert db._pool is None
