@@ -85,27 +85,33 @@ Catalog order, quotas, and the `psycopg2` gap in `create_index.py` are in [docs/
 
 ## Connection budget
 
-`SUPABASE_DB_URL` is the Supabase **session** pooler (`*.pooler.supabase.com`, port **5432**). Session mode pins one Postgres backend to each client. This project's pooler `pool_size` is **15**. Client 16 raises `asyncpg.exceptions.InternalServerError: (EMAXCONNSESSION) max clients reached in session mode`.
+`SUPABASE_DB_URL` is the Supabase session pooler (`*.pooler.supabase.com`, port **5432**). Session mode pins one Postgres backend to each client. This project's pooler `pool_size` is **15**. Client 16 raises `asyncpg.exceptions.InternalServerError: (EMAXCONNSESSION) max clients reached in session mode`.
 
-`get_pool()` in `app/db.py` creates one process-wide asyncpg pool, guarded by a lock so concurrent callers share it. Lifespan opens it on startup and `close_pool()` closes it on shutdown. Scripts that open the pool (`ingest_popular.py`, `build_embeddings.py`, `run_eval.py`, `test_retrieval.py`) close it before exit.
+`get_pool()` in `app/db.py` creates one process-wide asyncpg pool, rebound when the event loop changes. Lifespan opens it on startup and `close_pool()` closes it on shutdown. Scripts that open the pool (`ingest_popular.py`, `build_embeddings.py`, `run_eval.py`, `test_retrieval.py`) close it before exit.
 
 | Knob | Default | Env |
 | --- | --- | --- |
 | Idle connections per process | 1 | `DB_POOL_MIN_SIZE` |
 | Connections per process under load | 2 | `DB_POOL_MAX_SIZE` |
+| Query `command_timeout` (seconds) | 30 | `DB_COMMAND_TIMEOUT` |
+| Pool acquire timeout (seconds) | 5 | `DB_POOL_ACQUIRE_TIMEOUT` |
 | `pg_stat_activity.application_name` | `moody` | `DB_APPLICATION_NAME` |
+
+An acquire timeout on `/recommend` is HTTP 503 (`Database busy, try again shortly`).
 
 Slots in use at peak:
 
 ```
 (replicas × uvicorn workers × DB_POOL_MAX_SIZE)  for each Railway service
-+ ingest/eval/index scripts (each is another process with the same max)
++ ingest/eval scripts (each is another process with the same max)
 + 1 to 2 for the Supabase dashboard
 ```
 
-Keep that sum **under 15**. TEST and production share this pooler, so count both. The Procfile starts one uvicorn worker (no `--workers` / `WEB_CONCURRENCY`).
+Keep that sum **under 15** if you stay on session mode. TEST and production share this pooler, so count both. The Procfile starts one uvicorn worker (no `--workers` / `WEB_CONCURRENCY`).
 
-Do **not** point `SUPABASE_DB_URL` at the transaction pooler (port **6543**) for this app. Transaction mode multiplexes clients, but asyncpg prepared statements and the pgvector codec need a session. To use 6543 you would set `statement_cache_size=0`, and `LISTEN` would still not work. A 1 to 2 connection session pool fits the 15-slot cap, so session mode stays.
+Session mode on port 5432 is a choice, not a hard constraint. The transaction pooler (port **6543**) works with this app if you set `statement_cache_size=0` on `create_pool` and keep `register_vector` as the pool `init`. That multiplexes clients onto fewer backends. `LISTEN` still does not work in transaction mode. This repo stays on 5432 because a 1 to 2 connection session pool fits the 15-slot cap.
+
+`create_index.py` uses `psycopg2` and sits outside the asyncpg budget. Point it at the direct Postgres URL with `SUPABASE_DB_DIRECT_URL` (not the pooler) so a long `CREATE INDEX` does not hold a session-pooler slot. If that env is unset, the script falls back to `SUPABASE_DB_URL`.
 
 If you add replicas or workers, lower `DB_POOL_MAX_SIZE` until the formula fits. Set `DB_APPLICATION_NAME` to `moody-test` or `moody-production` so `pg_stat_activity` shows which service holds a slot.
 

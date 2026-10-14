@@ -6,8 +6,11 @@ class Settings(BaseSettings):
 
     openai_api_key: str | None = None  # Optional: only needed for embeddings and /recommend
     supabase_db_url: str
+    supabase_db_direct_url: str | None = None
     db_pool_min_size: int = 1
     db_pool_max_size: int = 2
+    db_command_timeout: float = 30.0
+    db_pool_acquire_timeout: float = 5.0
     db_application_name: str = "moody"
     anthropic_api_key: str | None = None  # Optional: only needed for /recommend reranking
     allowed_origins: str = (
@@ -30,6 +33,10 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def supabase_index_url(self) -> str:
+        return self.supabase_db_direct_url or self.supabase_db_url
 
 
 settings = Settings()

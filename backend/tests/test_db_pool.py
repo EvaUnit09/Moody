@@ -1,14 +1,10 @@
 import asyncio
-import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-os.environ.setdefault("OPENAI_API_KEY", "test-key")
-os.environ.setdefault("SUPABASE_DB_URL", "postgresql://test:test@localhost/test")
-os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
-
 from app import db
+from app.config import Settings
 
 
 @pytest.fixture
@@ -18,8 +14,7 @@ def reset_pool():
     db._pool = None
 
 
-@pytest.mark.asyncio
-async def test_get_pool_is_a_singleton_under_concurrency(reset_pool):
+async def _contend_for_pool():
     create_calls = 0
 
     async def fake_create_pool(*args, **kwargs):
@@ -36,6 +31,22 @@ async def test_get_pool_is_a_singleton_under_concurrency(reset_pool):
     assert len({id(pool) for pool in pools}) == 1
     assert pools[0] is db._pool
     assert again is pools[0]
+    return pools[0]
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_get_pool_contention_on_first_loop():
+    await _contend_for_pool()
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_get_pool_contention_on_second_loop():
+    await _contend_for_pool()
+
+
+def test_get_pool_survives_two_asyncio_run_calls():
+    asyncio.run(_contend_for_pool())
+    asyncio.run(_contend_for_pool())
 
 
 @pytest.mark.asyncio
@@ -52,6 +63,19 @@ async def test_get_pool_bounds_min_and_max_size(reset_pool):
 
     assert captured["min_size"] == 1
     assert captured["max_size"] == 2
+    assert captured["command_timeout"] == 30.0
+
+
+@pytest.mark.asyncio
+async def test_connection_raises_pool_acquire_timeout():
+    class BusyPool:
+        def acquire(self, *, timeout=None):
+            raise TimeoutError("queue empty")
+
+    with patch.object(db, "get_pool", new=AsyncMock(return_value=BusyPool())):
+        with pytest.raises(db.PoolAcquireTimeout):
+            async with db._connection():
+                pass
 
 
 @pytest.mark.asyncio
@@ -61,7 +85,7 @@ async def test_update_popularity_releases_connection_on_error(reset_pool):
             self.in_use = 0
             self.releases = 0
 
-        def acquire(self):
+        def acquire(self, **kwargs):
             pool = self
 
             class _Acquire:
@@ -114,8 +138,18 @@ async def test_close_pool_closes_and_clears(reset_pool):
             closed = True
 
     db._pool = FakePool()
+    db._pool_loop_id = id(asyncio.get_running_loop())
     await db.close_pool()
     assert closed is True
     assert db._pool is None
     await db.close_pool()
     assert db._pool is None
+
+
+def test_direct_url_falls_back_to_pooler_url():
+    pooler = "postgresql://user:pass@pooler:5432/postgres"
+    direct = "postgresql://user:pass@db:5432/postgres"
+    fallback = Settings(supabase_db_url=pooler)
+    assert fallback.supabase_index_url == pooler
+    preferred = Settings(supabase_db_url=pooler, supabase_db_direct_url=direct)
+    assert preferred.supabase_index_url == direct

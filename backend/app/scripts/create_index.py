@@ -2,10 +2,9 @@ import psycopg2
 
 from app.config import settings
 
-DATABASE_URL = settings.supabase_db_url
 
 def create_index():
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(settings.supabase_index_url)
     conn.autocommit = True
     cur = conn.cursor()
 
