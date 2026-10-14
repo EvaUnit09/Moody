@@ -1,5 +1,3 @@
-"""Regression tests for the process-wide asyncpg pool budget."""
-
 import asyncio
 from unittest.mock import AsyncMock, patch
 
