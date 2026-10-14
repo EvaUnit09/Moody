@@ -21,7 +21,7 @@ Suggested headless shape: `-u 4 -r 1 -t 2m` (about 60–80 recommend/min, near t
 1. Deploy a test branch with temporarily raised rate limits (production uses `10/minute`).
 2. Deploy that branch to a Railway environment you can afford to hammer.
 3. Point `MOODY_HOST` at that service and set `MOODY_ALLOW_PROD=1` to bypass the host guard.
-4. Each cache-miss recommend calls Claude (expand + rerank) and OpenAI (embed). Cost scales with unique queries. `MOODY_MISS_POOL` (default 20) caps sentinel exclude ids, so the distinct miss keys stop at `100 queries × pool size`. A fresh service has a cold cache, so the file pre-warms before the run (see below).
+4. Each cache-miss recommend calls Claude (expand + rerank) and OpenAI (embed). Cost scales with unique keys. `MOODY_MISS_POOL` (default 20) caps sentinel exclude ids. Distinct miss keys top out at `100 moods × pool size` for sentinel-only misses, and twice that when the independent 15% exclude preset is also on the request, because those two exclude lists do not share a cache key. Budget the run against the higher ceiling. A fresh service has a cold cache, so the file pre-warms before the run (see below).
 
 A high-VU run against the production URL mostly collects 429s and still pays for whatever misses get through.
 
