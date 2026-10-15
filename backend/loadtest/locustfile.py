@@ -6,7 +6,7 @@ Targets:
   GET  /health     — liveness
 
 POST /recommend is limited to 10/minute per client IP (slowapi, in-memory,
-keyed off X-Forwarded-For). A single Locust process shares one IP, and
+keyed off X-Real-IP). A single Locust process shares one IP, and
 wait_time below gives roughly 15-20 recommend calls/min per user, so
 `-u 4` sits near the ceiling. 429s count as failures.
 

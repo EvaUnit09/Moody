@@ -364,18 +364,25 @@ class TestRateLimitKey:
         from app.routers.recommend import limiter
         limiter._storage.storage.clear()
         cache._cache.clear()
-
-    def test_spoofed_first_hop_does_not_reset_the_limit(self):
         cache.store(cache.build_cache_key("cozy rainy day:US"), [])
-        client = TestClient(app)
 
-        statuses = [
-            client.post(
-                "/recommend",
-                json={"query": "cozy rainy day"},
-                headers={"X-Forwarded-For": f"203.0.113.{i}, 198.51.100.7"},
-            ).status_code
-            for i in range(11)
+    def _statuses(self, headers_per_request):
+        client = TestClient(app)
+        return [
+            client.post("/recommend", json={"query": "cozy rainy day"}, headers=headers).status_code
+            for headers in headers_per_request
         ]
 
+    def test_spoofed_forwarded_for_does_not_reset_the_limit(self):
+        statuses = self._statuses(
+            [{"X-Real-IP": "198.51.100.7", "X-Forwarded-For": f"203.0.113.{i}"} for i in range(11)]
+        )
+
         assert statuses == [200] * 10 + [429]
+
+    def test_clients_behind_a_shared_proxy_hop_keep_separate_limits(self):
+        statuses = self._statuses(
+            [{"X-Real-IP": f"198.51.100.{i}", "X-Forwarded-For": f"198.51.100.{i}, 100.64.0.1"} for i in range(11)]
+        )
+
+        assert statuses == [200] * 11
