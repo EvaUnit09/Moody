@@ -16,6 +16,9 @@ import { ShareButton } from "./components/ShareButton";
 import { useWatchlist } from "./hooks/useWatchlist";
 import "./App.css";
 
+// Matches the backend's exclude_tmdb_ids max_length; a longer list is a 422.
+const MAX_EXCLUDE_IDS = 100;
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -94,7 +97,7 @@ function App() {
 
     try {
       const excludeIds = excludePassedMovies && passedMovies.size > 0
-        ? Array.from(passedMovies)
+        ? Array.from(passedMovies).slice(-MAX_EXCLUDE_IDS)
         : undefined;
 
       const options: {

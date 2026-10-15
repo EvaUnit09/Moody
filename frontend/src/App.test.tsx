@@ -341,6 +341,26 @@ describe("Exclude passed movies functionality", () => {
     });
   });
 
+  test("sends only the 100 most recently passed ids", async () => {
+    const user = userEvent.setup();
+    recommendMock.mockResolvedValue([RECOMMENDED_MOVIE]);
+    const passedIds = Array.from({ length: 150 }, (_, i) => i + 1);
+    localStorage.setItem("moody-passed", JSON.stringify(passedIds));
+    localStorage.setItem("moody-exclude-passed", "true");
+
+    render(
+      <TestWrapper>
+        <App />
+      </TestWrapper>
+    );
+
+    await user.type(screen.getByRole("textbox"), "test query");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => expect(recommendMock).toHaveBeenCalled());
+    expect(recommendMock.mock.lastCall?.[0].exclude_tmdb_ids).toEqual(passedIds.slice(50));
+  });
+
   test("does not send exclude_tmdb_ids when toggle is off", async () => {
     const user = userEvent.setup();
     recommendMock.mockResolvedValue([RECOMMENDED_MOVIE]);

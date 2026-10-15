@@ -69,7 +69,7 @@ Passing a card writes the id, shows an Undo toast (6 seconds), and hides the
 card immediately. The checkbox labeled "don't show hidden" appears only after
 at least one title has been passed. When it is on (the default), the next
 search sends those ids as `exclude_tmdb_ids`. The backend accepts at most 100
-ids; a longer list is a `422` and the search fails. Turning the checkbox off
+ids, so the client sends the 100 most recently passed. Turning the checkbox off
 keeps the passed set but omits it from the request. Passed cards are also
 filtered out of the grid even when the server still returns them.
 
