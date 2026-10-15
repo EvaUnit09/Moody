@@ -1,28 +1,11 @@
-from anthropic import AsyncAnthropic
-
 from app.cache import normalize_query
-from app.config import settings
 from app.services.observability import DatadogObservability
+from app.services.rerank import _get_client
 
 EXPANSION_MODEL = "claude-haiku-4-5"
 # Queries with at least this many words are treated as already descriptive.
 # Title collisions ("Fall", "Heat", "Up") are almost always 1-2 words.
 MIN_DESCRIPTIVE_WORDS = 3
-
-_client: AsyncAnthropic | None = None
-
-
-def _get_client() -> AsyncAnthropic:
-    """Lazy initialization of Anthropic client (only fails if query expansion is actually used)."""
-    global _client
-    if _client is None:
-        if settings.anthropic_api_key is None:
-            raise ValueError(
-                "ANTHROPIC_API_KEY is required for query expansion. "
-                "Set it in .env or environment variables."
-            )
-        _client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=20.0)
-    return _client
 
 EXPAND_QUERY_TOOL = {
     "name": "expand_search_query",
