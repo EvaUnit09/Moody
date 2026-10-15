@@ -38,44 +38,19 @@ TRENDING_PAGES = 2
 REQUEST_TIMEOUT = 15.0
 
 
-async def fetch_popular_movies() -> list[dict]:
-    """Fetch current popular movies from TMDB."""
+async def fetch_pages(path: str, pages: int) -> list[dict]:
+    """Fetch pages 1..pages of a TMDB movie list endpoint."""
     movies = []
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-        for page in range(1, POPULAR_PAGES + 1):
+        for page in range(1, pages + 1):
             try:
-                resp = await client.get(
-                    f"{BASE_URL}/movie/popular",
-                    headers=HEADERS,
-                    params={"page": page},
-                )
+                resp = await client.get(f"{BASE_URL}{path}", headers=HEADERS, params={"page": page})
                 resp.raise_for_status()
                 results = resp.json().get("results", [])
                 movies.extend(results)
-                print(f"Fetched popular page {page}: {len(results)} movies")
+                print(f"Fetched {path} page {page}: {len(results)} movies")
             except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.RequestError) as e:
-                print(f"Failed to fetch popular page {page}: {e}")
-                raise
-    return movies
-
-
-async def fetch_trending_movies() -> list[dict]:
-    """Fetch current trending movies from TMDB (weekly window)."""
-    movies = []
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-        for page in range(1, TRENDING_PAGES + 1):
-            try:
-                resp = await client.get(
-                    f"{BASE_URL}/trending/movie/week",
-                    headers=HEADERS,
-                    params={"page": page},
-                )
-                resp.raise_for_status()
-                results = resp.json().get("results", [])
-                movies.extend(results)
-                print(f"Fetched trending page {page}: {len(results)} movies")
-            except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.RequestError) as e:
-                print(f"Failed to fetch trending page {page}: {e}")
+                print(f"Failed to fetch {path} page {page}: {e}")
                 raise
     return movies
 
@@ -120,8 +95,8 @@ async def ingest_popular() -> int:
     # Step 1: Fetch from TMDB
     try:
         popular, trending = await asyncio.gather(
-            fetch_popular_movies(),
-            fetch_trending_movies(),
+            fetch_pages("/movie/popular", POPULAR_PAGES),
+            fetch_pages("/trending/movie/week", TRENDING_PAGES),
         )
     except Exception as e:
         print(f"TMDB fetch failed: {e}")
