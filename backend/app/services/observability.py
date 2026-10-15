@@ -24,6 +24,42 @@ except ImportError:
     DDTRACE_AVAILABLE = False
 
 
+def _arg(args: tuple, kwargs: dict, index: int, name: str, default: Any) -> Any:
+    return args[index] if len(args) > index else kwargs.get(name, default)
+
+
+def _len_tag(key: str, value: Any) -> dict[str, int]:
+    return {key: len(value)} if isinstance(value, str | list) else {}
+
+
+def _traced(
+    span_name: str,
+    resource: str,
+    tags: dict[str, Any],
+    call_tags: Callable[[tuple, dict], dict[str, Any]],
+    result_tags: Callable[[Any], dict[str, Any]],
+) -> Callable[[Callable[..., T]], Callable[..., T]]:
+    """Run an async function inside a Datadog span tagged from its arguments and result."""
+
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
+            if not settings.dd_trace_enabled or not DDTRACE_AVAILABLE:
+                return await func(*args, **kwargs)
+
+            with tracer.trace(span_name, service=settings.dd_service, resource=resource) as span:
+                for key, value in {**tags, **call_tags(args, kwargs)}.items():
+                    span.set_tag(key, value)
+                result = await func(*args, **kwargs)
+                for key, value in result_tags(result).items():
+                    span.set_tag(key, value)
+                return result
+
+        return wrapper
+
+    return decorator
+
+
 class DatadogObservability:
     """Datadog instrumentation utilities with static methods for tracing and LLM observability."""
 
@@ -110,127 +146,53 @@ class DatadogObservability:
             print("[Datadog] DD_API_KEY not set, LLM Observability disabled")
 
     @staticmethod
-    def trace_embedding(func: Callable[..., T]) -> Callable[..., T]:
-        """Decorator to trace embedding calls with custom span."""
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
-            if not settings.dd_trace_enabled or not DDTRACE_AVAILABLE:
-                return await func(*args, **kwargs)
+    def trace_embedding(model: str) -> Callable[[Callable[..., T]], Callable[..., T]]:
+        return _traced(
+            "embedding.generate",
+            f"openai.{model}",
+            {"embedding.model": model, "embedding.provider": "openai"},
+            lambda args, kwargs: _len_tag("embedding.input_length", _arg(args, kwargs, 0, "text", "")),
+            lambda result: {"embedding.dimension": len(result)} if isinstance(result, list) and result else {},
+        )
 
-            with tracer.trace(
-                "embedding.generate",
-                service=settings.dd_service,
-                resource="openai.text-embedding-3-small",
-            ) as span:
-                span.set_tag("embedding.model", "text-embedding-3-small")
-                span.set_tag("embedding.provider", "openai")
-                
-                # Extract input text for metadata
-                text = args[0] if args else kwargs.get("text", "")
-                if isinstance(text, str):
-                    span.set_tag("embedding.input_length", len(text))
-                
-                result = await func(*args, **kwargs)
-                
-                if isinstance(result, list) and len(result) > 0:
-                    span.set_tag("embedding.dimension", len(result))
-                
-                return result
-        return wrapper
+    trace_vector_search = staticmethod(
+        _traced(
+            "vector_search.similarity",
+            "supabase.pgvector",
+            {
+                "vector_search.provider": "supabase",
+                "vector_search.index_type": "hnsw",
+                "vector_search.similarity_metric": "cosine",
+            },
+            lambda args, kwargs: (
+                {"vector_search.limit": limit} if (limit := _arg(args, kwargs, 1, "limit", None)) else {}
+            ),
+            lambda result: _len_tag("vector_search.results_count", result),
+        )
+    )
 
     @staticmethod
-    def trace_vector_search(func: Callable[..., T]) -> Callable[..., T]:
-        """Decorator to trace vector similarity search with custom span."""
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
-            if not settings.dd_trace_enabled or not DDTRACE_AVAILABLE:
-                return await func(*args, **kwargs)
-
-            with tracer.trace(
-                "vector_search.similarity",
-                service=settings.dd_service,
-                resource="supabase.pgvector",
-            ) as span:
-                span.set_tag("vector_search.provider", "supabase")
-                span.set_tag("vector_search.index_type", "hnsw")
-                span.set_tag("vector_search.similarity_metric", "cosine")
-                
-                # Extract limit parameter
-                limit = kwargs.get("limit", args[1] if len(args) > 1 else None)
-                if limit:
-                    span.set_tag("vector_search.limit", limit)
-                
-                result = await func(*args, **kwargs)
-                
-                if isinstance(result, list):
-                    span.set_tag("vector_search.results_count", len(result))
-                
-                return result
-        return wrapper
+    def trace_llm_rerank(model: str) -> Callable[[Callable[..., T]], Callable[..., T]]:
+        return _traced(
+            "llm.rerank",
+            f"anthropic.{model}",
+            {"llm.provider": "anthropic", "llm.model": model, "llm.operation": "rerank"},
+            lambda args, kwargs: {
+                **_len_tag("llm.query_length", _arg(args, kwargs, 0, "query", "")),
+                **_len_tag("llm.candidate_count", _arg(args, kwargs, 1, "candidates", [])),
+            },
+            lambda result: _len_tag("llm.output_count", result),
+        )
 
     @staticmethod
-    def trace_llm_rerank(func: Callable[..., T]) -> Callable[..., T]:
-        """Decorator to trace LLM reranking with LLM Observability."""
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
-            if not settings.dd_trace_enabled or not DDTRACE_AVAILABLE:
-                return await func(*args, **kwargs)
-
-            # Extract query and candidates for metadata
-            query = args[0] if args else kwargs.get("query", "")
-            candidates = args[1] if len(args) > 1 else kwargs.get("candidates", [])
-
-            with tracer.trace(
-                "llm.rerank",
-                service=settings.dd_service,
-                resource="anthropic.claude-haiku-4-5",
-            ) as span:
-                span.set_tag("llm.provider", "anthropic")
-                span.set_tag("llm.model", "claude-haiku-4-5")
-                span.set_tag("llm.operation", "rerank")
-                
-                if isinstance(query, str):
-                    span.set_tag("llm.query_length", len(query))
-                if isinstance(candidates, list):
-                    span.set_tag("llm.candidate_count", len(candidates))
-                
-                result = await func(*args, **kwargs)
-                
-                if isinstance(result, list):
-                    span.set_tag("llm.output_count", len(result))
-
-                return result
-        return wrapper
-
-    @staticmethod
-    def trace_query_expansion(func: Callable[..., T]) -> Callable[..., T]:
-        """Decorator to trace query expansion (pre-embedding query rewrite) calls."""
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
-            if not settings.dd_trace_enabled or not DDTRACE_AVAILABLE:
-                return await func(*args, **kwargs)
-
-            query = args[0] if args else kwargs.get("query", "")
-
-            with tracer.trace(
-                "llm.query_expansion",
-                service=settings.dd_service,
-                resource="anthropic.claude-haiku-4-5",
-            ) as span:
-                span.set_tag("llm.provider", "anthropic")
-                span.set_tag("llm.model", "claude-haiku-4-5")
-                span.set_tag("llm.operation", "query_expansion")
-
-                if isinstance(query, str):
-                    span.set_tag("llm.query_length", len(query))
-
-                result = await func(*args, **kwargs)
-
-                if isinstance(result, str):
-                    span.set_tag("llm.expanded_query_length", len(result))
-
-                return result
-        return wrapper
+    def trace_query_expansion(model: str) -> Callable[[Callable[..., T]], Callable[..., T]]:
+        return _traced(
+            "llm.query_expansion",
+            f"anthropic.{model}",
+            {"llm.provider": "anthropic", "llm.model": model, "llm.operation": "query_expansion"},
+            lambda args, kwargs: _len_tag("llm.query_length", _arg(args, kwargs, 0, "query", "")),
+            lambda result: _len_tag("llm.expanded_query_length", result),
+        )
 
     @staticmethod
     def wrap_llm_call(

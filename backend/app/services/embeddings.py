@@ -23,7 +23,7 @@ def _get_client() -> AsyncOpenAI:
     return _client
 
 
-@DatadogObservability.trace_embedding
+@DatadogObservability.trace_embedding(EMBEDDING_MODEL)
 async def embed_text(text: str) -> list[float]:
     client = _get_client()
     response = await client.embeddings.create(model=EMBEDDING_MODEL, input=text)

@@ -75,7 +75,7 @@ def should_expand(query: str) -> bool:
     return len(normalize_query(query).split()) < MIN_DESCRIPTIVE_WORDS
 
 
-@DatadogObservability.trace_query_expansion
+@DatadogObservability.trace_query_expansion(EXPANSION_MODEL)
 async def expand_query(query: str) -> str:
     """Rewrite short/ambiguous queries into intent-rich phrasing before embedding."""
     if not should_expand(query):

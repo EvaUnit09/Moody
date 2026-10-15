@@ -51,7 +51,7 @@ class TestObservabilityDecorators:
             
             from app.services.observability import DatadogObservability
             
-            @DatadogObservability.trace_embedding
+            @DatadogObservability.trace_embedding("text-embedding-3-small")
             async def mock_embed(text: str) -> list[float]:
                 return [0.1, 0.2, 0.3]
             
@@ -82,7 +82,7 @@ class TestObservabilityDecorators:
             
             from app.services.observability import DatadogObservability
             
-            @DatadogObservability.trace_llm_rerank
+            @DatadogObservability.trace_llm_rerank("claude-haiku-4-5")
             async def mock_rerank(query: str, candidates: list[dict]) -> list[dict]:
                 return candidates[:3]
             
@@ -98,7 +98,7 @@ class TestObservabilityDecorators:
             
             from app.services.observability import DatadogObservability
             
-            @DatadogObservability.trace_embedding
+            @DatadogObservability.trace_embedding("text-embedding-3-small")
             async def failing_function(text: str):
                 raise ValueError("Test error")
             
