@@ -13,7 +13,6 @@ Tests cover:
 import os
 import time
 
-import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
 
@@ -60,11 +59,11 @@ class TestCacheNormalization:
     def test_cache_collision_near_duplicates(self):
         """Near-duplicate queries should hit the same cache entry."""
         results = [{"tmdb_id": 1, "title": "Test Movie"}]
-        
+
         # Store with normalized key
         key = cache.normalize_query("sci-fi action")
         cache.store(key, results)
-        
+
         # These should all hit the same cache entry (all normalize to same key)
         assert cache.get(cache.normalize_query("sci-fi action")) == results
         assert cache.get(cache.normalize_query("Sci-Fi Action")) == results
@@ -72,7 +71,7 @@ class TestCacheNormalization:
         assert cache.get(cache.normalize_query("sci-fi, action!")) == results
         # Hyphen/space equivalence
         assert cache.get(cache.normalize_query("sci fi action")) == results
-        
+
         # Verify it's all cache hits
         assert cache._cache_stats["hits"] == 5
         assert cache._cache_stats["misses"] == 0
@@ -80,22 +79,22 @@ class TestCacheNormalization:
     def test_cache_stats(self):
         """Cache should track hits and misses."""
         results = [{"tmdb_id": 1, "title": "Test"}]
-        
+
         # Miss
         key1 = cache.normalize_query("query1")
         assert cache.get(key1) is None
         assert cache._cache_stats["misses"] == 1
-        
+
         # Store and hit
         cache.store(key1, results)
         assert cache.get(key1) == results
         assert cache._cache_stats["hits"] == 1
-        
+
         # Another miss
         key2 = cache.normalize_query("query2")
         assert cache.get(key2) is None
         assert cache._cache_stats["misses"] == 2
-        
+
         stats = cache.get_stats()
         assert stats["hits"] == 1
         assert stats["misses"] == 2
@@ -120,7 +119,7 @@ class TestPopularMoodTTL:
         assert cache._is_popular_mood("I'm feeling sad")
         assert cache._is_popular_mood("sci-fi adventure")
         assert cache._is_popular_mood("sci fi adventure")  # hyphen/space equivalence
-        
+
         # Should NOT match
         assert not cache._is_popular_mood("obscure indie film from 1973")
 
@@ -129,7 +128,7 @@ class TestPopularMoodTTL:
         # "sad" should NOT match in "crusade"
         assert not cache._is_popular_mood("crusade movie")
         assert not cache._is_popular_mood("ambassador documentary")
-        
+
         # But should match as a word
         assert cache._is_popular_mood("sad movie")
         assert cache._is_popular_mood("I'm sad today")
@@ -145,17 +144,17 @@ class TestPopularMoodTTL:
     def test_popular_mood_longer_ttl(self):
         """Popular mood queries should get longer TTL."""
         results = [{"tmdb_id": 1}]
-        
+
         # Store popular mood with is_popular flag
         popular_key = cache.normalize_query("romantic comedy")
         cache.store(popular_key, results, is_popular=True)
         popular_ttl = cache._cache[popular_key][0] - time.monotonic()
-        
+
         # Store non-popular mood
         regular_key = cache.normalize_query("obscure indie experimental")
         cache.store(regular_key, results, is_popular=False)
         regular_ttl = cache._cache[regular_key][0] - time.monotonic()
-        
+
         # Popular should have longer TTL
         assert popular_ttl > regular_ttl
         assert popular_ttl > cache.CACHE_TTL_SECONDS
@@ -173,7 +172,7 @@ class TestRateLimiting:
     def test_rate_limit_exceeded(self):
         """Bursting /recommend should return 429."""
         client = TestClient(app)
-        
+
         # Mock the recommend logic to avoid actual API calls
         with patch('app.routers.recommend.expand_query', new_callable=AsyncMock, side_effect=lambda q: q):
             with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
@@ -222,7 +221,7 @@ class TestRateLimiting:
     def test_rate_limit_friendly_message(self):
         """Rate limit response should have friendly JSON body."""
         client = TestClient(app)
-        
+
         # Mock to avoid API calls
         with patch('app.routers.recommend.expand_query', new_callable=AsyncMock, side_effect=lambda q: q):
             with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
@@ -259,7 +258,7 @@ class TestRateLimiting:
     def test_other_routes_not_rate_limited(self):
         """Other routes should not be affected by /recommend rate limiting."""
         client = TestClient(app)
-        
+
         # First, exhaust the /recommend rate limit
         with patch('app.routers.recommend.expand_query', new_callable=AsyncMock, side_effect=lambda q: q):
             with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
@@ -284,7 +283,7 @@ class TestRateLimiting:
                         # Verify /recommend is rate limited
                         response = client.post("/recommend", json={"query": "one more"})
                         assert response.status_code == 429
-        
+
         # Now test other routes - they should still work
         # Mock popular movies for /popular endpoint
         with patch('app.routers.popular.get_popular_movies', new_callable=AsyncMock) as mock_popular:
@@ -298,11 +297,11 @@ class TestRateLimiting:
                     "genres": ["Action"]
                 }
             ]
-            
+
             # /popular should not be rate limited
             response = client.get("/popular")
             assert response.status_code == 200
-            
+
             # /health should not be rate limited
             response = client.get("/health")
             assert response.status_code == 200
@@ -322,7 +321,7 @@ class TestCacheWithRateLimit:
     def test_cache_hit_still_counts_toward_rate_limit(self):
         """Cache hits still count toward rate limit (they're still requests)."""
         client = TestClient(app)
-        
+
         with patch('app.routers.recommend.expand_query', new_callable=AsyncMock, side_effect=lambda q: q):
             with patch('app.routers.recommend.embed_text', new_callable=AsyncMock) as mock_embed:
                 with patch('app.routers.recommend.search_similar', new_callable=AsyncMock) as mock_search:
@@ -386,3 +385,20 @@ class TestRateLimitKey:
         )
 
         assert statuses == [200] * 11
+
+
+class TestCacheBound:
+    def setup_method(self):
+        cache._cache.clear()
+
+    def test_store_evicts_oldest_entry_at_capacity(self, monkeypatch):
+        monkeypatch.setattr(cache, "MAX_CACHE_ENTRIES", 3, raising=False)
+        for key in ["a", "b", "c"]:
+            cache.store(key, [{"tmdb_id": 1}])
+
+        cache.store("a", [{"tmdb_id": 2}])
+        cache.store("d", [{"tmdb_id": 3}])
+
+        assert len(cache._cache) == 3
+        assert cache.get("b") is None
+        assert cache.get("a") == [{"tmdb_id": 2}]

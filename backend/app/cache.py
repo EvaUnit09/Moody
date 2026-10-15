@@ -6,6 +6,8 @@ logger = logging.getLogger(__name__)
 
 CACHE_TTL_SECONDS = 3600
 POPULAR_CACHE_TTL_SECONDS = 7200  # 2 hours for popular moods
+# Expired entries are only dropped when read, so cap the dict and evict the oldest write.
+MAX_CACHE_ENTRIES = 5000
 
 # Popular mood keywords that get longer TTL
 # These are common mood/scenario queries that tend to repeat
@@ -139,6 +141,9 @@ def store(cache_key: str, results: list[dict], is_popular: bool = False) -> None
     # Use longer TTL for popular mood queries
     ttl = POPULAR_CACHE_TTL_SECONDS if is_popular else CACHE_TTL_SECONDS
     
+    _cache.pop(cache_key, None)
+    if len(_cache) >= MAX_CACHE_ENTRIES:
+        del _cache[next(iter(_cache))]
     _cache[cache_key] = (time.monotonic() + ttl, results)
     logger.debug(f"Cache store: key={cache_key!r} ttl={ttl}s popular={is_popular}")
 
