@@ -221,6 +221,8 @@ async def update_popularity(movies: list[dict]) -> int:
     
     Returns count of movies updated.
     """
+    if not movies:
+        raise ValueError("update_popularity got an empty batch; it would reset every movie's popularity")
     rows = [
         (
             movie["id"],
