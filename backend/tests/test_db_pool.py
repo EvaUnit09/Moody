@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -132,6 +133,9 @@ async def test_update_popularity_releases_connection_on_error(reset_pool):
             return _Acquire()
 
     class BoomConnection:
+        def transaction(self):
+            return contextlib.nullcontext()
+
         async def executemany(self, *args, **kwargs):
             raise RuntimeError("executemany failed")
 
@@ -260,3 +264,10 @@ def test_settings_pool_defaults_and_test_min_zero():
 def test_settings_reject_invalid_pool_bounds(overrides, match):
     with pytest.raises(ValidationError, match=match):
         Settings(supabase_db_url=_POOLER_URL, **overrides)
+
+
+async def test_update_popularity_refuses_an_empty_batch():
+    with patch.object(db, "get_pool", new=AsyncMock()) as get_pool:
+        with pytest.raises(ValueError, match="empty"):
+            await db.update_popularity([])
+    get_pool.assert_not_awaited()
