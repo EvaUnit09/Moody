@@ -140,3 +140,9 @@ class TestShouldExpand:
 
         assert result == "cozy rainy day"
         mock_client.messages.create.assert_not_called()
+
+
+def test_expansion_and_rerank_share_one_anthropic_client():
+    from app.services import query_intent, rerank
+
+    assert query_intent._get_client() is rerank._get_client()

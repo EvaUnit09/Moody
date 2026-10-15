@@ -29,12 +29,12 @@ _client: AsyncAnthropic | None = None
 
 
 def _get_client() -> AsyncAnthropic:
-    """Lazy initialization of Anthropic client (only fails if reranking is actually used)."""
+    """Lazy Anthropic client shared by rerank and query expansion; fails only when first used."""
     global _client
     if _client is None:
         if settings.anthropic_api_key is None:
             raise ValueError(
-                "ANTHROPIC_API_KEY is required for reranking. "
+                "ANTHROPIC_API_KEY is required for reranking and query expansion. "
                 "Set it in .env or environment variables."
             )
         _client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=20.0)
