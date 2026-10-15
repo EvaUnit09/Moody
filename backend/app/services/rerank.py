@@ -158,7 +158,7 @@ async def rerank(query: str, candidates: list[dict]) -> list[dict]:
     candidates_by_id = {c["tmdb_id"]: c for c in candidates}
     results = []
     for pick in picks:
-        candidate = candidates_by_id.get(pick.get("tmdb_id"))
+        candidate = candidates_by_id.pop(pick.get("tmdb_id"), None)
         if candidate is None:
             continue
         results.append({**candidate, "reason": pick["reason"]})

@@ -179,3 +179,22 @@ class TestRerankTokenBudget:
             await rerank("rainy day", CANDIDATES)
 
         assert mock_client.messages.create.call_args.kwargs["max_tokens"] == RERANK_MAX_TOKENS
+
+
+@pytest.mark.asyncio
+async def test_repeated_pick_appears_once_with_its_first_reason():
+    mock_client = AsyncMock()
+    mock_client.messages.create = AsyncMock(
+        return_value=_mock_message(
+            [
+                {"tmdb_id": 1, "reason": "First."},
+                {"tmdb_id": 1, "reason": "Again."},
+                {"tmdb_id": 3, "reason": "Tense."},
+            ]
+        )
+    )
+
+    with patch("app.services.rerank._get_client", return_value=mock_client):
+        result = await rerank("quiet", CANDIDATES)
+
+    assert [(r["tmdb_id"], r["reason"]) for r in result] == [(1, "First."), (3, "Tense.")]
