@@ -19,27 +19,17 @@ router = APIRouter()
 
 
 def get_rate_limit_key(request: Request) -> str:
-    """Extract rate limit key from request.
-    
-    For Railway deployments behind a proxy, attempts to use X-Forwarded-For header.
-    
-    LIMITATION: When using in-memory storage with multiple Railway replicas:
-    - Each replica maintains its own rate limit state
-    - Effective limit is N×10/min where N = number of replicas
-    - Clients may be load-balanced across replicas, making the limit less predictable
-    
-    For production with strict rate limits, consider:
-    - Single replica (prevents shared state issues)
-    - Shared store like Redis (requires adding redis to stack)
-    - Documenting the multiplied limit in API docs
+    """Key the rate limit on the client IP.
+
+    Behind Railway this is X-Real-IP, the edge's documented client-IP header.
+    X-Forwarded-For is ignored: callers can prepend to it, and a proxy hop after
+    the client would make its last entry the same for every user.
+
+    LIMITATION: counters are in-memory, so N replicas allow about N×10/min.
     """
-    # Check X-Forwarded-For header for Railway proxy
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        # Use the first (client) IP from the chain
-        return forwarded_for.split(",")[0].strip()
-    
-    # Fallback to direct connection (local dev, direct access)
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
     return request.client.host if request.client else "unknown"
 
 

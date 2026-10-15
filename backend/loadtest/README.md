@@ -12,7 +12,7 @@ Simulates users typing mood queries against `POST /recommend`, plus lighter
 
 Set `MOODY_HOST` in `backend/.env` to the target URL. The locustfile reads it through `settings.moody_host`. By default, **only localhost and 127.0.0.1 are allowed** to prevent accidental load testing of deployed services. All Railway, Vercel, and other deployed hosts are blocked unless `MOODY_ALLOW_PROD=1` is explicitly set.
 
-`POST /recommend` on that branch is limited to **100 requests per minute per client IP** (`slowapi`, in-memory, first hop of `X-Forwarded-For`). One Locust process shares one IP. `/popular` and `/health` are not limited.
+`POST /recommend` on that branch is limited to **100 requests per minute per client IP** (`slowapi`, in-memory, keyed on `X-Real-IP`). One Locust process shares one IP. `/popular` and `/health` are not limited.
 
 `wait_time` is `between(0.8, 2.0)`. Once cache hits are fast, that is about **15–20 recommend calls per minute per user**. Task weights are recommend 7, popular 2, health 1.
 
