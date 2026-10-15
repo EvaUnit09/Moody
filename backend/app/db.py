@@ -204,10 +204,17 @@ _UPDATE_POPULARITY_SQL = """
     where tmdb_id = $1
 """
 
+# Titles that fell off TMDB's popular lists would otherwise keep their last high score forever.
+_RESET_STALE_POPULARITY_SQL = """
+    update movies set popularity = 0
+    where popularity > 0 and tmdb_id <> all($1::bigint[])
+"""
+
 
 async def update_popularity(movies: list[dict]) -> int:
     """
     Update popularity metrics only, preserving keywords and embeddings.
+    Every other movie's popularity is reset to 0 in the same transaction.
     
     Used by scheduled ingest to refresh popularity rankings without
     overwriting enriched keywords or regenerating embeddings.
@@ -230,11 +237,12 @@ async def update_popularity(movies: list[dict]) -> int:
     ]
 
     updated = 0
-    async with _connection() as conn:
+    async with _connection() as conn, conn.transaction():
         for i in range(0, len(rows), UPSERT_BATCH_SIZE):
             batch = rows[i : i + UPSERT_BATCH_SIZE]
             await conn.executemany(_UPDATE_POPULARITY_SQL, batch)
             updated += len(batch)
             print(f"Updated popularity for {min(i + UPSERT_BATCH_SIZE, len(rows))}/{len(rows)} movies")
+        await conn.execute(_RESET_STALE_POPULARITY_SQL, [row[0] for row in rows])
 
     return updated

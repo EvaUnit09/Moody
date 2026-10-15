@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -132,6 +133,9 @@ async def test_update_popularity_releases_connection_on_error(reset_pool):
             return _Acquire()
 
     class BoomConnection:
+        def transaction(self):
+            return contextlib.nullcontext()
+
         async def executemany(self, *args, **kwargs):
             raise RuntimeError("executemany failed")
 

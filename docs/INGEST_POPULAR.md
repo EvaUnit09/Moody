@@ -140,6 +140,7 @@ The browser also keeps `movierec:popular-cache` for first paint (10 minutes). `A
 ## Notes
 
 - Fetches 3 pages of `/movie/popular` and 2 pages of weekly `/trending/movie/week` (~100–200 titles before filtering)
+- In the same transaction, sets `popularity = 0` for every movie not in this run, so titles that left TMDB's lists drop off the shelf. The script exits before any write when TMDB returns nothing usable.
 - Writes with `UPDATE ... WHERE tmdb_id = $1`. A title that was never embedded is left out of the catalog. The script's "updated" count is the number of statements sent, including ids that matched no row.
 - Only movies with `vote_average >= 5.0` are updated
 - Duplicates across popular/trending are deduplicated by TMDB ID
