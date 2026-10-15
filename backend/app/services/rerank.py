@@ -96,7 +96,7 @@ def _build_prompt(query: str, candidates: list[dict]) -> str:
     )
 
 
-@DatadogObservability.trace_llm_rerank
+@DatadogObservability.trace_llm_rerank(RERANK_MODEL)
 async def rerank(query: str, candidates: list[dict]) -> list[dict]:
     if not candidates:
         return []
