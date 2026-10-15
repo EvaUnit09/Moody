@@ -21,7 +21,7 @@ router = APIRouter()
 def get_rate_limit_key(request: Request) -> str:
     """Extract rate limit key from request.
     
-    For Railway deployments behind a proxy, attempts to use X-Forwarded-For header.
+    Behind Railway, uses the last hop of X-Forwarded-For.
     
     LIMITATION: When using in-memory storage with multiple Railway replicas:
     - Each replica maintains its own rate limit state
@@ -33,11 +33,10 @@ def get_rate_limit_key(request: Request) -> str:
     - Shared store like Redis (requires adding redis to stack)
     - Documenting the multiplied limit in API docs
     """
-    # Check X-Forwarded-For header for Railway proxy
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
-        # Use the first (client) IP from the chain
-        return forwarded_for.split(",")[0].strip()
+        # The caller controls every hop but the last, which Railway's proxy appends.
+        return forwarded_for.split(",")[-1].strip()
     
     # Fallback to direct connection (local dev, direct access)
     return request.client.host if request.client else "unknown"

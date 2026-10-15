@@ -357,3 +357,25 @@ class TestCacheWithRateLimit:
                         # 11th request should be rate limited, even though it's a cache hit
                         response = client.post("/recommend", json={"query": "test"})
                         assert response.status_code == 429
+
+
+class TestRateLimitKey:
+    def setup_method(self):
+        from app.routers.recommend import limiter
+        limiter._storage.storage.clear()
+        cache._cache.clear()
+
+    def test_spoofed_first_hop_does_not_reset_the_limit(self):
+        cache.store(cache.build_cache_key("cozy rainy day:US"), [])
+        client = TestClient(app)
+
+        statuses = [
+            client.post(
+                "/recommend",
+                json={"query": "cozy rainy day"},
+                headers={"X-Forwarded-For": f"203.0.113.{i}, 198.51.100.7"},
+            ).status_code
+            for i in range(11)
+        ]
+
+        assert statuses == [200] * 10 + [429]
