@@ -67,7 +67,7 @@ Returns 16 movies (`POPULAR_LIMIT`) with `vote_count >= 100` and `vote_average >
 
 ## Caching and rate limits
 
-`POST /recommend` is limited to **10 requests per minute per client IP** (`slowapi`, in-memory). Behind Railway, the key is `X-Real-IP`, the edge's documented client-IP header, otherwise the direct socket address. `X-Forwarded-For` is ignored because callers can write to it. Each replica keeps its own counters, so N replicas allow about N×10/min. A `429` body is `{ "error": "Rate limit exceeded", "message": "..." }` with `Retry-After: 60`. The frontend reads `detail` on errors, so the UI shows the status code for this response.
+`POST /recommend` is limited to **10 requests per minute per client IP** (`slowapi`, in-memory). Behind Railway, the key is `X-Real-IP`, the edge's documented client-IP header, otherwise the direct socket address. `X-Forwarded-For` is ignored because callers can write to it. Each replica keeps its own counters, so N replicas allow about N×10/min. A `429` body is `{ "error": "Rate limit exceeded", "message": "..." }` with `Retry-After: 60`. The frontend shows a string `detail`, else `message`, else the status code.
 
 The recommend cache and the popular cache are process-local and share one dict capped at 5000 entries (`MAX_CACHE_ENTRIES`); a store at the cap evicts the oldest write. A GitHub Actions ingest does not clear them. Anthropic or OpenAI failures during expansion, embed, or rerank are not caught in the router; they surface as a 500 and are not cached.
 

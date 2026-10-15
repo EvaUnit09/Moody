@@ -25,7 +25,9 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(body?.detail ?? `Request failed with status ${response.status}`);
+    // FastAPI sends detail as a string or a 422 validation list; the 429 handler sends message.
+    const message = typeof body?.detail === "string" ? body.detail : body?.message;
+    throw new Error(message ?? `Request failed with status ${response.status}`);
   }
 
   return response.json();
