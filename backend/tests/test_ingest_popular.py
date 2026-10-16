@@ -55,3 +55,12 @@ async def test_tmdb_error_exits_1_without_writing(tmdb):
     assert await ingest.ingest_popular() == 1
 
     update.assert_not_awaited()
+
+
+async def test_database_failure_log_includes_exception_type(tmdb, capsys):
+    _, _, update = tmdb
+    update.side_effect = TimeoutError()
+
+    assert await ingest.ingest_popular() == 2
+
+    assert "Database update failed: TimeoutError" in capsys.readouterr().out
