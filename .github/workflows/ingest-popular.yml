@@ -40,4 +40,6 @@ jobs:
         if: failure()
         run: |
           echo "Ingest failed. Check logs for TMDB/DB errors."
-          echo "Existing popular shelf remains unchanged."
+          echo "A TMDB error leaves the database unchanged."
+          echo "A database error can leave new popularity scores committed. Re-run the job to finish clearing stale scores."
+          echo "Railway's in-memory shelf still refreshes on its own schedule."

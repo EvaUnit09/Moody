@@ -117,7 +117,7 @@ async def ingest_popular() -> int:
         updated = await update_popularity(movies)
         print(f"Successfully updated popularity for {updated} movies")
     except Exception as e:
-        print(f"Database update failed: {e}")
+        print(f"Database update failed: {type(e).__name__}: {e}")
         return 2
     finally:
         await close_pool()

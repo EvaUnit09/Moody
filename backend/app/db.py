@@ -205,20 +205,28 @@ _UPDATE_POPULARITY_SQL = """
 """
 
 # Titles that fell off TMDB's popular lists would otherwise keep their last high score forever.
+# One statement over every stale row exceeds the 30s command timeout. popularity is not indexed.
+POPULARITY_RESET_BATCH_SIZE = 500
 _RESET_STALE_POPULARITY_SQL = """
+    with stale as (
+        select tmdb_id from movies
+        where popularity > 0 and tmdb_id <> all($1::bigint[])
+        limit $2
+    )
     update movies set popularity = 0
-    where popularity > 0 and tmdb_id <> all($1::bigint[])
+    from stale
+    where movies.tmdb_id = stale.tmdb_id
 """
 
 
 async def update_popularity(movies: list[dict]) -> int:
     """
     Update popularity metrics only, preserving keywords and embeddings.
-    Every other movie's popularity is reset to 0 in the same transaction.
-    
+    Every other movie's popularity is reset to 0 after those updates commit.
+
     Used by scheduled ingest to refresh popularity rankings without
     overwriting enriched keywords or regenerating embeddings.
-    
+
     Returns count of movies updated.
     """
     if not movies:
@@ -239,12 +247,24 @@ async def update_popularity(movies: list[dict]) -> int:
     ]
 
     updated = 0
-    async with _connection() as conn, conn.transaction():
-        for i in range(0, len(rows), UPSERT_BATCH_SIZE):
-            batch = rows[i : i + UPSERT_BATCH_SIZE]
-            await conn.executemany(_UPDATE_POPULARITY_SQL, batch)
-            updated += len(batch)
-            print(f"Updated popularity for {min(i + UPSERT_BATCH_SIZE, len(rows))}/{len(rows)} movies")
-        await conn.execute(_RESET_STALE_POPULARITY_SQL, [row[0] for row in rows])
+    # Commit the new scores first. A reset timeout must not roll them back.
+    async with _connection() as conn:
+        async with conn.transaction():
+            for i in range(0, len(rows), UPSERT_BATCH_SIZE):
+                batch = rows[i : i + UPSERT_BATCH_SIZE]
+                await conn.executemany(_UPDATE_POPULARITY_SQL, batch)
+                updated += len(batch)
+        print(f"Updated popularity for {updated}/{len(rows)} movies")
+
+        keep_ids = [row[0] for row in rows]
+        while True:
+            async with conn.transaction():
+                status = await conn.execute(
+                    _RESET_STALE_POPULARITY_SQL,
+                    keep_ids,
+                    POPULARITY_RESET_BATCH_SIZE,
+                )
+            if int(status.split()[-1]) == 0:
+                break
 
     return updated

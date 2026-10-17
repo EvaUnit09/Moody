@@ -271,3 +271,113 @@ async def test_update_popularity_refuses_an_empty_batch():
         with pytest.raises(ValueError, match="empty"):
             await db.update_popularity([])
     get_pool.assert_not_awaited()
+
+
+def _popular_movie(tmdb_id: int, popularity: float) -> dict:
+    return {
+        "id": tmdb_id,
+        "title": f"Movie {tmdb_id}",
+        "popularity": popularity,
+        "vote_average": 7.0,
+        "vote_count": 500,
+        "poster_path": "/p.jpg",
+        "backdrop_path": "/b.jpg",
+        "release_date": "2024-01-01",
+        "genre_ids": [18],
+    }
+
+
+class _PopularityTable:
+    """Movies table that commits and rolls back like a connection transaction."""
+
+    def __init__(self, popularity: dict[int, float], *, fail_reset: bool = False, fail_after_resets: int | None = None):
+        self.popularity = dict(popularity)
+        self.fail_reset = fail_reset
+        self.fail_after_resets = fail_after_resets
+        self._resets = 0
+        self._checkpoint: dict[int, float] | None = None
+
+    def transaction(self):
+        table = self
+
+        class _Tx:
+            async def __aenter__(self):
+                table._checkpoint = dict(table.popularity)
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                if exc_type is None:
+                    table._checkpoint = None
+                else:
+                    table.popularity = table._checkpoint
+                    table._checkpoint = None
+                return False
+
+        return _Tx()
+
+    async def executemany(self, sql, batch):
+        for row in batch:
+            tmdb_id, popularity = row[0], row[1]
+            if tmdb_id in self.popularity:
+                self.popularity[tmdb_id] = popularity
+
+    async def execute(self, sql, keep_ids, limit=None):
+        if self.fail_reset or (self.fail_after_resets is not None and self._resets >= self.fail_after_resets):
+            raise TimeoutError()
+        self._resets += 1
+        if limit is None:
+            limit = len(self.popularity)
+        keep = set(keep_ids)
+        stale = [tmdb_id for tmdb_id, score in self.popularity.items() if score > 0 and tmdb_id not in keep]
+        for tmdb_id in stale[:limit]:
+            self.popularity[tmdb_id] = 0
+        return f"UPDATE {min(len(stale), limit)}"
+
+
+def _pool_yielding(conn):
+    class _Pool:
+        def acquire(self, **kwargs):
+            class _Acquire:
+                async def __aenter__(self):
+                    return conn
+
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
+
+            return _Acquire()
+
+    return _Pool()
+
+
+async def test_popularity_updates_remain_when_reset_fails(capsys):
+    table = _PopularityTable({1: 500, 2: 50}, fail_reset=True)
+
+    with patch.object(db, "get_pool", new=AsyncMock(return_value=_pool_yielding(table))):
+        with pytest.raises(TimeoutError):
+            await db.update_popularity([_popular_movie(2, 300)])
+
+    assert table.popularity == {1: 500, 2: 300}
+    assert "Updated popularity for 1/1 movies" in capsys.readouterr().out
+
+
+async def test_update_popularity_zeros_ids_missing_from_the_ingest(capsys, monkeypatch):
+    monkeypatch.setattr(db, "POPULARITY_RESET_BATCH_SIZE", 1)
+    table = _PopularityTable({1: 500, 2: 50, 3: 40})
+
+    with patch.object(db, "get_pool", new=AsyncMock(return_value=_pool_yielding(table))):
+        updated = await db.update_popularity([_popular_movie(2, 300)])
+
+    assert updated == 1
+    assert table.popularity == {1: 0, 2: 300, 3: 0}
+    assert "Updated popularity for 1/1 movies" in capsys.readouterr().out
+
+
+async def test_earlier_reset_batch_remains_when_a_later_batch_fails(monkeypatch):
+    monkeypatch.setattr(db, "POPULARITY_RESET_BATCH_SIZE", 1)
+    table = _PopularityTable({1: 500, 2: 50, 3: 40}, fail_after_resets=1)
+
+    with patch.object(db, "get_pool", new=AsyncMock(return_value=_pool_yielding(table))):
+        with pytest.raises(TimeoutError):
+            await db.update_popularity([_popular_movie(2, 300)])
+
+    assert table.popularity == {1: 0, 2: 300, 3: 40}
