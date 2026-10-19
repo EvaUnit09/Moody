@@ -23,9 +23,34 @@ CI uses Node 24. Vitest sets `NODE_OPTIONS=--no-experimental-webstorage` in
 
 `App` calls `POST /recommend` through `src/api.ts`. A new search aborts the
 previous in-flight request. The URL is updated to `?q=`; loading the page with
-that param runs the search. Mood chips and the recent-moods rail call the same
-handler. "More like this" searches
+that param runs the search. "More like this" searches
 `movies like ${title}, same vibe as "${currentQuery}"`.
+
+## Preset moods
+
+The recent-moods rail and the preset chips render only on the home screen
+(`hasSearched` is false). Starting a search unmounts both. The brand button
+clears the query, aborts the request, and shows them again.
+
+`RecentChips` is the rail labeled `Recent`. It is omitted when
+`moody-recent-moods` is empty. Each chip searches that saved query. `Clear
+recent searches` wipes the rail.
+
+`MoodChips` reads `MOOD_GROUPS` in `src/lib/moodGroups.ts` and renders three
+sections, in this order. A chip's accessible name is `Search for <mood>
+movies`.
+
+| Section | Moods |
+| --- | --- |
+| Quiet | `slow & melancholic`, `cozy rainy night`, `dark & atmospheric` |
+| Warm | `feel-good comfort`, `nothing heavy`, `date night`, `nostalgic 90s/00s vibes` |
+| Wired | `high-energy thrill`, `mind-bending`, `smart & talky` |
+
+`RecoveryPrompt` is a different list. It is not `MOOD_GROUPS`. The chips are
+`feel-good comfort`, `smart & talky`, `high-energy thrill`, `dark &
+atmospheric`, `nostalgic 90s/00s vibes`, and `cozy rainy night`. Each one's
+accessible name is `Try <mood> instead`. `slow & melancholic`, `nothing
+heavy`, `date night`, and `mind-bending` are home presets only.
 
 Sort pills reorder the current result list in the browser (`best-match` keeps
 server order, then highest rated, newest, title A–Z). They do not call the API
@@ -48,9 +73,18 @@ another 4 seconds before auto-advance. At either end the next step wraps.
 If `GET /popular` fails and nothing was painted from `movierec:popular-cache`,
 the carousel stays empty; a cache hit is kept.
 
-An empty result set or a request error renders `RecoveryPrompt` with starter
-moods. The popular carousel is hidden once a search has started. The brand
-button aborts the request and returns to the home state.
+An empty result list or a request error renders `RecoveryPrompt` with the
+copy `Nothing quite matches that. Try one of these instead:`. The API text
+is not printed. `api.ts` prefers a string `detail`, then `message`, then
+`Request failed with status <code>`. A 422 body whose `detail` is a list
+(FastAPI validation) becomes that status sentence. A 429 uses `message`
+(`You've made too many requests. Please try again in a minute.`). A 503
+uses the string `detail` (`Database busy, try again shortly`). `App` stores
+that sentence and, when it is set, hides the `matches for` heading. The
+recovery chips still look the same as an empty result set, which keeps the
+heading. `AbortError` is ignored. The popular carousel is hidden once a
+search has started. The brand button aborts the request and returns to the
+home state.
 
 ## Hidden titles and watchlist
 
@@ -69,9 +103,13 @@ Passing a card writes the id, shows an Undo toast (6 seconds), and hides the
 card immediately. The checkbox labeled "don't show hidden" appears only after
 at least one title has been passed. When it is on (the default), the next
 search sends those ids as `exclude_tmdb_ids`. The backend accepts at most 100
-ids, so the client sends the 100 most recently passed. Turning the checkbox off
-keeps the passed set but omits it from the request. Passed cards are also
-filtered out of the grid even when the server still returns them.
+ids, so the client sends the 100 most recently passed (`Array.from` on the
+set, then `slice(-100)`; insertion order follows the stored array). Turning
+the checkbox off keeps the passed set but omits it from the request. Passed
+cards are also filtered out of the grid even when the server still returns
+them. If every returned title is already passed, the grid renders nothing
+and `RecoveryPrompt` stays hidden, because that prompt checks
+`results.length === 0`, not the filtered list.
 
 Watchlist adds and removes are local only. Quota failures toast "Couldn't save — storage full" and leave the previous value in place.
 

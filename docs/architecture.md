@@ -61,7 +61,7 @@ Embeddings are stored as `halfvec(1536)` with an HNSW index
 | Backend framework | FastAPI | Project is fundamentally a RAG service, not a full-stack gateway — no need for a Node layer |
 | Reranking LLM | Claude Haiku 4.5 | Fast, cheap, keeps tooling consistent with other AI projects (ops-agent, LangSmith) |
 | Query caching | In-memory (dict + TTL) | Cuts redundant LLM calls on repeat queries with near-zero build cost; upgradeable to Redis later as a scaling story |
-| Rate limiting | IP-based | Simplest to build, no user state required, protects the public LLM endpoint from abuse |
+| Rate limiting | `X-Real-IP`, in-memory | Railway's client-IP header. `X-Forwarded-For` is ignored. Counters are per replica |
 | Auth | None | Fully stateless and public; fits the "type a mood, get a movie" use case without added security surface area |
 | Backend hosting | Railway | Usage-based pricing fits low, bursty traffic |
 | Frontend hosting | Vercel | Simple deploy for a React app |
@@ -115,7 +115,7 @@ Moody/
       App.tsx
       api.ts
       components/
-      lib/          # watchlist, passed ids, recent moods, popular cache
+      lib/          # watchlist, passed ids, recent moods, mood groups, popular cache
     package.json
   docs/
   README.md
