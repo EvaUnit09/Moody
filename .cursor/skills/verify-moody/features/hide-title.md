@@ -34,6 +34,6 @@ Preconditions:
 
 - The pass control is not on carousel cards.
 - The toast lasts about 6 seconds. After it is gone, Undo is gone. The id remains stored.
-- More than 100 stored ids makes the next `/recommend` a 422, and the UI takes the recovery path. A long local list can fail a later search for that reason.
+- The client sends at most the last 100 ids in stored insertion order (`slice(-100)`). A longer `moody-passed` list does not 422. Older ids stay stored and are still dropped from the current grid, but they are left out of `exclude_tmdb_ids`. A newly passed id is appended. Passing an id that is already stored does not move it.
 - The grid also drops passed ids from the current results even when the server still returned them. Local disappearance does not prove `hide-exclude`.
 - Turning the checkbox off does not delete `moody-passed`.

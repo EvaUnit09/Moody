@@ -36,8 +36,8 @@ Raw vector similarity alone gives "in the neighborhood" results, not good
 judgment — the rerank step is what turns it into a curated shortlist. Request
 and response details, cache TTLs, and the exclude-list limit are in
 [backend/README.md](backend/README.md). Browser-only state (hidden titles,
-watchlist, recent moods, `?q=` links) is in
-[frontend/README.md](frontend/README.md). See
+watchlist, recent moods, the Quiet / Warm / Wired preset chips, `?q=` links)
+is in [frontend/README.md](frontend/README.md). See
 [docs/architecture.md](docs/architecture.md) for the stack-decision rationale
 and [docs/plan/backend-buildout.md](docs/plan/backend-buildout.md) for the
 original implementation plan.

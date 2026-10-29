@@ -62,7 +62,7 @@ Manual runs via `workflow_dispatch` remain available regardless of schedule stat
 
 If TMDB is down or unreachable, the script exits with code 1 and **does not modify the database**. The existing popular shelf remains available to users.
 
-If database update fails (exit 2), the shelf may be partially updated. Check GitHub Actions logs for details.
+If the database update fails (exit 2), new popularity scores may already be committed and the stale reset may be unfinished. Re-run the job. Check GitHub Actions logs for which step raised.
 
 ### Blast Radius
 
@@ -110,8 +110,8 @@ Railway environment variables should already include the required keys.
 
 ## Exit Codes & Monitoring
 
-- **0**: Success (popularity rows written). The carousel still serves the previous in-memory list until the warm loop or TTL described below.
-- **1**: TMDB API error (existing shelf unchanged, **safe failure**)
+- **0**: The job finished without a TMDB or database error. A filtered list with nothing to write is also 0, and the database is left as-is. When rows were written, the carousel still serves the previous in-memory list until the warm loop or TTL described below.
+- **1**: TMDB API error (existing shelf unchanged, **safe failure**). `fetch_pages` uses a 15 second timeout and raises on the first failed page. `ingest_popular` fetches `/movie/popular` and `/trending/movie/week` together; either failure returns 1 before `update_popularity`.
 - **2**: Database update error. New popularity scores may already be committed. Re-run the job to finish clearing stale scores.
 
 Monitor via GitHub Actions logs. Exit code 1 is expected occasionally (TMDB rate limits or downtime) and is safe.
@@ -140,7 +140,7 @@ The browser also keeps `movierec:popular-cache` for first paint (10 minutes). `A
 ## Notes
 
 - Fetches 3 pages of `/movie/popular` and 2 pages of weekly `/trending/movie/week` (~100–200 titles before filtering)
-- Commits the new popularity scores, then sets `popularity = 0` in batches for every other movie that still has a score. A reset failure leaves the new scores saved. The script exits before any write when TMDB returns nothing usable.
+- Writes the new scores in one transaction, 1000 rows at a time (`UPSERT_BATCH_SIZE`), then sets `popularity = 0` for every other movie that still has a score. Each reset statement selects at most 500 of those stale rows (`POPULARITY_RESET_BATCH_SIZE`: `popularity > 0` and not in the keep set) and commits on its own. One statement over every stale row exceeds `DB_COMMAND_TIMEOUT` (30 seconds); `popularity` is not indexed. A reset failure leaves the new scores saved. `update_popularity([])` raises `ValueError` so an empty call cannot zero the catalog. The script returns 0 before calling it when the filter yields nothing, and it returns 1 before any write when TMDB fails.
 - Writes with `UPDATE ... WHERE tmdb_id = $1`. A title that was never embedded is left out of the catalog. The script's "updated" count is the number of statements sent, including ids that matched no row.
 - Only movies with `vote_average >= 5.0` are updated
 - Duplicates across popular/trending are deduplicated by TMDB ID
