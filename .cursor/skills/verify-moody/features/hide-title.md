@@ -25,7 +25,7 @@ Preconditions:
 
 - **Pass.** Remember the card title and, from its TMDB link `https://www.themoviedb.org/movie/<id>`, the id. Click `Pass on this recommendation` on that card. The title is gone from the grid. The region `Notifications` contains `Hidden` and a button `Undo`. `localStorage['moody-passed']` is a JSON array containing that id.
 - **Checkbox appears.** The checkbox `don't show hidden` is now in the search form. It is checked when `moody-exclude-passed` is missing or any value other than `false`.
-- **Undo.** Click `Undo` before 6 seconds pass. The id is no longer in `moody-passed`. Run the same search again only if you still have rate-limit budget and need the card back on screen. Undo restores the id even when the grid does not repaint the card until the next results render.
+- **Undo.** Click `Undo` before 6 seconds pass. The id is no longer in `moody-passed`. The card returns on the current grid, including when it was the last visible card, because the grid filters `passedMovies`. Undo does not call `/recommend`. If the delete fails, the id stays stored and the card stays hidden.
 - **Exclude.** With the checkbox checked and at least one id stored, run a new search. The request body includes `exclude_tmdb_ids` containing that id. With the checkbox unchecked, the id stays in `moody-passed` and the next request omits `exclude_tmdb_ids`. Observe the request. Do not infer it from the checkbox graphic alone.
 - **Restore.** Write back the original passed list and exclude flag.
 - **Proof.** Save `artifacts/hide-title/hidden.aria.txt` and `artifacts/hide-title/hidden.png` while the toast is visible and the title is gone. `notes.txt` names `hide-pass` and entry point `result card`.

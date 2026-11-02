@@ -36,7 +36,7 @@ Preconditions:
 ## Gotchas
 
 - The heart control is not on `popular right now` cards. If `Add to watchlist` is missing, you are on the carousel.
-- A storage failure toasts `Couldn't save — storage full` and leaves the previous list in place. That is a failed add.
+- A storage failure toasts `Couldn't save — storage full` and leaves the previous list in place. That is a failed add. The same toast is what an invalid movie object gets; the copy is not only quota.
 - Export buttons download a file in the browser. Do not treat a download as the persistence proof. The localStorage read is the proof.
 - The dialog closes on Escape and on the backdrop. `Close watchlist` is the handle to use.
 - Restoring localStorage after the proof does not by itself update an already open dialog. Restore, then reload or click `Moody`, so the next journey sees the restored list.

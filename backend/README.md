@@ -67,6 +67,25 @@ Returns 16 movies (`POPULAR_LIMIT`) with `vote_count >= 100` and `vote_average >
 
 `{"status": "ok"}`. Not rate limited.
 
+## CORS
+
+`CORSMiddleware` allows every method and header and does not allow
+credentials. Origins come from `ALLOWED_ORIGINS`, a comma-separated list
+(`allowed_origins` on `Settings`). Blank segments are dropped. The code
+default is the Vite dev origins only:
+
+- `http://localhost:5173`
+- `http://127.0.0.1:5173`
+- `http://localhost:5174`
+- `http://127.0.0.1:5174`
+
+`https://www.moodyalpha.app` is not in that default. The Railway service has
+to set `ALLOWED_ORIGINS` to the frontend origin (`.env.example` shows that
+URL). A browser on any other origin, including a preview deploy, cannot
+read the response. `POST /recommend` preflights because the client sends
+`Content-Type: application/json`. `curl` does not send `Origin`, so
+`/health` still returns 200.
+
 ## Caching and rate limits
 
 `POST /recommend` is limited to **10 requests per minute per client IP** (`slowapi`, in-memory). Behind Railway, the key is `X-Real-IP`, the edge's documented client-IP header, otherwise the direct socket address. `X-Forwarded-For` is ignored because callers can write to it. Each replica keeps its own counters, so N replicas allow about N×10/min. A `429` body is `{ "error": "Rate limit exceeded", "message": "You've made too many requests. Please try again in a minute." }` with `Retry-After: 60`. The client prefers a string `detail`, then `message`, then `Request failed with status <code>`. The screen still shows `RecoveryPrompt` and does not print that sentence. See the [frontend README](../frontend/README.md).
@@ -103,7 +122,7 @@ This service is sized for **1 uvicorn worker** (the Procfile has no `--workers` 
 | `pg_stat_activity.application_name` | `moody` | `DB_APPLICATION_NAME` |
 | Direct Postgres URL for `create_index.py` | unset (falls back to `SUPABASE_DB_URL`) | `SUPABASE_DB_DIRECT_URL` |
 
-Code default for `DB_POOL_MIN_SIZE` is **1** (production). The TEST Railway service must set `DB_POOL_MIN_SIZE=0` so an idle TEST replica holds no session slots. `DB_POOL_MAX_SIZE` stays **2**.
+Code default for `DB_POOL_MIN_SIZE` is **1** (production). The TEST Railway service must set `DB_POOL_MIN_SIZE=0` so an idle TEST replica holds no session slots. `DB_POOL_MAX_SIZE` stays **2**. If `DB_POOL_MIN_SIZE` is greater than `DB_POOL_MAX_SIZE`, settings refuse to load and the process does not start.
 
 An acquire timeout on `/recommend` is HTTP 503 (`Database busy, try again shortly`).
 
