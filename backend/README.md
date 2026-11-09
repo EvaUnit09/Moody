@@ -63,6 +63,8 @@ Empty `providers` on an otherwise successful response usually means TMDB rejecte
 
 Returns 16 movies (`POPULAR_LIMIT`) with `vote_count >= 100` and `vote_average >= 5.0`, ordered by the `popularity` column. No request body. Served from the in-memory `__popular__` entry (1 hour TTL). Startup warms that entry, and a background task refreshes it every 3300 seconds. See [docs/INGEST_POPULAR.md](../docs/INGEST_POPULAR.md) for how the column stays current.
 
+The route is not rate limited. A pool acquire timeout is HTTP 503 with `detail` `Database busy, try again shortly`, the same string as `/recommend`. Lifespan awaits `warm_popular_cache()` before the app serves traffic, so a failure there aborts startup. The 3300s loop logs `popular cache refresh failed` and leaves the previous `__popular__` entry in place.
+
 ### `GET /health`
 
 `{"status": "ok"}`. Not rate limited.
@@ -72,6 +74,8 @@ Returns 16 movies (`POPULAR_LIMIT`) with `vote_count >= 100` and `vote_average >
 `POST /recommend` is limited to **10 requests per minute per client IP** (`slowapi`, in-memory). Behind Railway, the key is `X-Real-IP`, the edge's documented client-IP header, otherwise the direct socket address. `X-Forwarded-For` is ignored because callers can write to it. Each replica keeps its own counters, so N replicas allow about N×10/min. A `429` body is `{ "error": "Rate limit exceeded", "message": "You've made too many requests. Please try again in a minute." }` with `Retry-After: 60`. The client prefers a string `detail`, then `message`, then `Request failed with status <code>`. The screen still shows `RecoveryPrompt` and does not print that sentence. See the [frontend README](../frontend/README.md).
 
 The recommend cache and the popular cache are process-local and share one dict capped at 5000 entries (`MAX_CACHE_ENTRIES`); a store at the cap evicts the oldest write. A GitHub Actions ingest does not clear them. Anthropic or OpenAI failures during expansion, embed, or rerank are not caught in the router; they surface as a 500 and are not cached.
+
+The 2-hour TTL is chosen from the original query, after `strip`, via `_is_popular_mood`. Region and `exclude_tmdb_ids` change the cache key and do not change the TTL. `normalize_query` lowercases, turns hyphens into spaces, and drops other punctuation. A keyword that contains a space matches as a substring. A single-word keyword matches on a word boundary, so `sad` matches and `crusade` does not. The set is `POPULAR_MOOD_KEYWORDS` in `cache.py`. `sci-fi` normalizes to `sci fi` and takes 2 hours. Of the home preset chips, `dark & atmospheric` (`dark`), `feel-good comfort` (`feel good`), and `date night` take 2 hours. `slow & melancholic`, `cozy rainy night`, `nothing heavy`, `nostalgic 90s/00s vibes`, `high-energy thrill`, `mind-bending`, and `smart & talky` take 1 hour. The carousel key `__popular__` is stored without `is_popular=True`, so it stays on the 1-hour TTL.
 
 ## Layout
 
@@ -105,7 +109,7 @@ This service is sized for **1 uvicorn worker** (the Procfile has no `--workers` 
 
 Code default for `DB_POOL_MIN_SIZE` is **1** (production). The TEST Railway service must set `DB_POOL_MIN_SIZE=0` so an idle TEST replica holds no session slots. `DB_POOL_MAX_SIZE` stays **2**.
 
-An acquire timeout on `/recommend` is HTTP 503 (`Database busy, try again shortly`).
+An acquire timeout on `/recommend` or `/popular` is HTTP 503 (`Database busy, try again shortly`).
 
 Slots in use at peak with the planned 1 worker:
 

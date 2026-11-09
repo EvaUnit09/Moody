@@ -80,6 +80,8 @@ movies`.
 | Warm | `feel-good comfort`, `nothing heavy`, `date night`, `nostalgic 90s/00s vibes` |
 | Wired | `high-energy thrill`, `mind-bending`, `smart & talky` |
 
+Three of these strings match the backend's 2-hour recommend cache: `dark & atmospheric`, `feel-good comfort`, and `date night`. The other seven use the 1-hour TTL. The match rules are in the [backend README](../backend/README.md).
+
 `RecoveryPrompt` is a different list. It is not `MOOD_GROUPS`. The chips are
 `feel-good comfort`, `smart & talky`, `high-energy thrill`, `dark &
 atmospheric`, `nostalgic 90s/00s vibes`, and `cozy rainy night`. Each one's

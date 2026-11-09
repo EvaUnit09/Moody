@@ -44,9 +44,9 @@ locust -f loadtest/locustfile.py --headless -u 4 -r 1 -t 2m
 
 ### Warm-up
 
-The `/recommend hit` stat is by intent, and on a cold service the first request for each cache key is a real miss. So before the run, the locustfile requests every key the hit path can use: each of the 100 moods, plus its exclude-preset variant. That is **200 real Claude/OpenAI calls**, sent below the rate limit, then a 60 second wait so the limiter's one-minute window resets. Expect roughly **3.5 minutes** before traffic starts. The `-t` timer starts after that, and warm-up requests are not in the Locust stats.
+The `/recommend hit` stat is by intent, and on a cold service the first request for each cache key is a real miss. So before the run, the locustfile requests every key the hit path can use: each of the 100 moods, plus its exclude-preset variant. That is **200 real Claude/OpenAI calls**. The default pace is `MOODY_WARMUP_RATE=80` (one request every 0.75s, `WARMUP_PER_MINUTE` in `locustfile.py`), then a 60 second wait so the limiter's one-minute window resets. Expect roughly **3.5 minutes** before traffic starts. 80/min stays under a test branch raised to 100/min. Production is 10/min, so the same warm-up receives 429 and stops. The `-t` timer starts after that, and warm-up requests are not in the Locust stats.
 
-- If a 429 comes back, warm-up stops and logs an error. That means the deployed limiter is lower than the warm-up rate.
+- If a 429 comes back, warm-up stops and logs an error. That means the deployed limiter is lower than the warm-up rate. The log text says the limiter is "lower than the 10/min production uses". Production is 10/min and the default warm-up is 80/min, so that sentence points the wrong way. The 429 is the signal.
 - In the web UI, wait for the `Warm-up done` log line before pressing Start. A host typed into the UI after startup is not warmed.
 - `MOODY_WARMUP=0` skips it (hit p95 then includes cold misses). `MOODY_WARMUP_RATE` and `MOODY_WARMUP_SETTLE` change the pace and the wait.
 - Warm-up runs only in a single-process run, not under `--master` or `--worker`.
