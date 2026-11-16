@@ -22,7 +22,7 @@ Body (`RecommendRequest`):
 | Field | Constraint |
 | --- | --- |
 | `query` | Required string, 1–200 characters. Whitespace-only is rejected with `400` after trim. |
-| `region` | Optional 2-letter ISO code. Empty or omitted becomes `US`. Anything else is `400`. |
+| `region` | Optional 2-letter ISO code. Empty or omitted becomes `US`. Letters are uppercased, so `us` is `US`. Anything else is `400`, including whitespace (`Invalid region code: ...`). |
 | `exclude_tmdb_ids` | Optional list of TMDB ids, at most 100. More than that is `422`. |
 
 ```bash
@@ -31,12 +31,12 @@ curl -s -X POST http://localhost:8000/recommend \
   -d '{"query":"slow and melancholic","exclude_tmdb_ids":[550,680]}'
 ```
 
-Response is `{ "results": [ ... ] }`. Each result is a movie plus `reason` and `providers` (up to 3 watch links for the region). The reranker returns at most 6 titles (`TOP_N` in `rerank.py`).
+Response is `{ "results": [ ... ] }`. Each result is a movie plus `reason` and `providers` (up to 3 watch links for the region). The JSON fields are `tmdb_id`, `title`, `poster_path`, `year`, `vote_average`, `genres`, `reason`, and `providers`. The search row also carries `overview`, `keywords`, and `distance`; `MovieRecommendation` leaves those off the body. The reranker returns at most 6 titles (`TOP_N` in `rerank.py`).
 
 Pipeline, in order:
 
 1. **Cache lookup.** The key is `build_cache_key(f"{query}:{region}", exclude_ids)`. `normalize_query` lowercases, turns hyphens into spaces, and strips other punctuation, so the region code is concatenated onto the normalized query. Exclude ids are sorted and de-duplicated; an empty list is stored the same as omitting the field. A hit skips every step below. Default TTL is 1 hour. Queries that match a popular-mood keyword in `cache.py` are stored for 2 hours.
-2. **Query expansion.** `should_expand` counts words in `normalize_query(query)` (lowercase, hyphens become spaces, other punctuation dropped). Fewer than 3 words (`MIN_DESCRIPTIVE_WORDS`) calls Claude Haiku (`claude-haiku-4-5`, `max_tokens` 256) to rewrite the text into 1–2 sentences so the embedding does not latch onto a title. Three or more words return the original string and do not call the model. `"Fall"` and `"date night"` expand. `"sci-fi"` becomes two words (`sci fi`) and expands. `"cozy rainy day"` is embedded as typed. The string returned by `expand_query` is what gets embedded. The **original** query is what the reranker sees.
+2. **Query expansion.** `should_expand` counts words in `normalize_query(query)` (lowercase, hyphens become spaces, other punctuation dropped). Fewer than 3 words (`MIN_DESCRIPTIVE_WORDS`) calls Claude Haiku (`claude-haiku-4-5`, `max_tokens` 256) to rewrite the text into 1–2 sentences so the embedding does not latch onto a title. Three or more words return the original string and do not call the model. `"Fall"` and `"date night"` expand. `"sci-fi"` becomes two words (`sci fi`) and expands. `"cozy rainy day"` is embedded as typed. The string returned by `expand_query` is what gets embedded. A blank `expanded_query` after strip falls back to the original string. A message with no `tool_use` block makes `next(...)` raise `StopIteration`, which leaves the coroutine as `RuntimeError: coroutine raised StopIteration`. The router does not catch it, so the response is 500 and is not cached. Rerank fails the same way when its tool block is missing. The **original** query is what the reranker sees.
 3. **Embed + search.** `text-embedding-3-small`, then cosine search on `movies.embedding_half` (`halfvec(1536)`). Limit is 25 (`CANDIDATE_LIMIT` in `recommend.py`; `search_similar` defaults to the same 25). Rows with `vote_average` below 5.0 are dropped in SQL.
 4. **Excludes.** Matching `tmdb_id`s are removed from those 25 candidates before rerank. The search does not fetch replacements, so a long exclude list can leave the reranker a short pool.
 5. **Rerank.** Haiku (`max_tokens` 512) picks up to 6 of the remaining candidates. Each overview in the prompt is cut to 300 characters at a word boundary (`MAX_OVERVIEW_CHARS`); a cut is marked with `…`. The tool schema asks for one sentence of at most 15 words (`MAX_REASON_WORDS`), grounded in that truncated overview. The API does not reject a longer reason. Picks whose id is not in the candidate set are discarded. A repeated `tmdb_id` is kept once, with the first reason; the id is removed from the candidate map as soon as it is used. The loop stops at `TOP_N`.

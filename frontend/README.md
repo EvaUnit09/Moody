@@ -34,10 +34,23 @@ pills reset to `best-match`. A missing rating or year sorts as `-1` (last for
 highest-rated and newest).
 
 `handleSearch` writes `?q=` with `pushState`. That param is read only on the
-first mount. There is no `popstate` handler, so Back changes the URL and leaves
-the screen where it is. `ShareButton` builds the same URL. It uses
-`navigator.share` when that exists (a user cancel is ignored) and otherwise
-copies the URL, showing "Copied!" for 2 seconds.
+first mount. The form submit trims; a `?q=` load passes the raw value through,
+and the backend strips before search. A successful search stores the trimmed
+string in recent moods. There is no `popstate` handler, so Back
+changes the URL and leaves the screen where it is.
+
+The heading `matches for`, `ShareButton`, and "More like this" read the live
+textbox. After a search finishes the field is editable again. Further typing
+changes the heading and the share URL on the current origin (`?q=` plus
+`encodeURIComponent` of the box). "More like this" sends
+`movies like ${title}, same vibe as "${textbox}"` with that same text. A box
+of only whitespace still shows the control; an empty string hides it. The
+cards stay the response already on screen until the next submit, which is
+also when the address bar's `?q=` changes. Share uses `navigator.share` when
+that exists (a user cancel is ignored) and otherwise copies the URL, showing
+"Copied!" for 2 seconds. A clipboard failure logs `console.error` and leaves
+the label as `Share`. The heading and the button render while `error` is
+null, including during `Thinking...`.
 
 The carousel item width is one quarter of the track (`(100% - 3 gaps) / 4`),
 and each auto-step scrolls one track width, so it advances four posters. The
@@ -65,6 +78,7 @@ home state.
 The recent-moods rail and the preset chips render only on the home screen
 (`hasSearched` is false). Starting a search unmounts both. The brand button
 clears the query, aborts the request, and shows them again.
+That click `pushState`s the path with an empty query string.
 
 `RecentChips` is the rail labeled `Recent`. It is omitted when
 `moody-recent-moods` is empty. Each chip searches that saved query. The
