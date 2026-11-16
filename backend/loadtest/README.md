@@ -10,7 +10,9 @@ Simulates users typing mood queries against `POST /recommend`, plus lighter
 
 ## Before you run
 
-Set `MOODY_HOST` in `backend/.env` to the target URL. The locustfile reads it through `settings.moody_host`. By default, **only localhost and 127.0.0.1 are allowed** to prevent accidental load testing of deployed services. All Railway, Vercel, and other deployed hosts are blocked unless `MOODY_ALLOW_PROD=1` is explicitly set.
+Set `MOODY_HOST` in `backend/.env` to the target URL. The locustfile reads it through `settings.moody_host` (`MoodyUser.host`). `--host` overrides it.
+
+The guard looks for the substrings `localhost` and `127.0.0.1` anywhere in the lowercased host string. `http://127.0.0.1.example` passes. A Railway host does not. `MOODY_ALLOW_PROD=1` skips the check. An empty host skips it too. At process start a refused host raises `SystemExit` before warm-up. A host typed into the web UI is checked again when the run starts: a refusal logs that message, sets the process exit code to 1, and quits the runner. Warm-up has already finished or been skipped by then, so that UI host is unwarmed either way.
 
 `POST /recommend` on that branch is limited to **100 requests per minute per client IP** (`slowapi`, in-memory, keyed on `X-Real-IP`). One Locust process shares one IP. `/popular` and `/health` are not limited.
 

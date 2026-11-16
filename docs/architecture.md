@@ -65,20 +65,15 @@ Embeddings are stored as `halfvec(1536)` with an HNSW index
 | Auth | None | Fully stateless and public; fits the "type a mood, get a movie" use case without added security surface area |
 | Backend hosting | Railway | Usage-based pricing fits low, bursty traffic |
 | Frontend hosting | Vercel | Simple deploy for a React app |
-| Observability | Datadog | All-in-one: APM tracing on FastAPI + LLM Observability for the Haiku call, rather than splitting across Datadog and LangSmith |
+| Observability | Datadog | One vendor for the Haiku calls. When `DD_TRACE_ENABLED` and `DD_API_KEY` are set, startup enables agentless LLM Observability and disables APM export |
 
 ## Observability plan
 
-- `ddtrace-run` wraps the FastAPI app for APM
-- Custom spans around: query expansion, embedding call, vector search, Haiku rerank
-- The expansion span still opens when the rewrite is skipped. LLM Observability
-  token annotation runs only on the Haiku calls that actually happen (rerank,
-  and expansion when the query is under 3 words)
-- Datadog LLM Observability tracks token counts, cost per request, and latency
-on those Haiku calls
-- Dashboard: requests/min, p50/p95 latency, error rate, cost per day
-- Tracing scoped to `/recommend` only — not static assets or health checks,
-both for free-tier limits and signal-to-noise
+- The Procfile starts under `ddtrace-run` when `DD_TRACE_ENABLED=true` and `DD_API_KEY` is set. `initialize()` then sets `apm_tracing_disabled=True` and enables agentless LLM Observability, so this process does not export APM spans. Agent mode is `DD_TRACE_AGENT_URL` with no API key. Setup and the span list are in [datadog-setup.md](datadog-setup.md).
+- Custom spans around: query expansion, embedding call, vector search, Haiku rerank. Agentless mode keeps those spans off the APM export path.
+- The expansion span still opens when the rewrite is skipped. LLM Observability token annotation runs only on the Haiku calls that actually happen (rerank, and expansion when the query is under 3 words).
+- Datadog LLM Observability tracks token counts, cost per request, and latency on those Haiku calls.
+- `RecommendOnlyFilter` keeps an APM trace whose root span mentions `/recommend`. In agentless mode that filter does not decide what LLM Observability records. `/health` and `/popular` do not call `wrap_llm_call`.
 
 ## Repo structure
 
