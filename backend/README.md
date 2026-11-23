@@ -9,9 +9,13 @@ vector search over Supabase/pgvector, and reranks results with Claude Haiku.
 pip install -r requirements.txt
 cp .env.example .env   # fill in OPENAI_API_KEY, ANTHROPIC_API_KEY, SUPABASE_DB_URL
 uvicorn app.main:app --reload   # http://localhost:8000
-pytest                           # run tests
+pytest                           # run tests (also enforces 75% coverage)
 ruff check app                   # lint
 ```
+
+`pytest` does not need `.env` or a running Postgres. `tests/conftest.py` fills `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `SUPABASE_DB_URL`, `TMDB_API_READ_TOKEN`, `DD_TRACE_ENABLED`, and `DD_API_KEY` with dummy values when those names are unset. A value already exported in the shell is left as-is. The default run does not open that URL. `tests/test_update_popularity_db.py` is the one test that opens Postgres, and only when `MOODY_TEST_DB_URL` points at a disposable database. Otherwise that file skips.
+
+`pytest.ini` always adds `--cov=app --cov-fail-under=75`. `pyproject.toml` omits `app/scripts/*`, so the gate is the importable app, not the catalog or ingest scripts. A run whose tests passed still exits non-zero when that percentage is missed. `asyncio_mode = auto`, so async tests do not need a marker.
 
 ## HTTP API
 
@@ -83,7 +87,7 @@ The recommend cache and the popular cache are process-local and share one dict c
 - `app/scripts/` — `fetch_movies.py`, `fetch_keywords.py`, `build_embeddings.py`, `ingest_popular.py`, `create_index.py`, `run_eval.py`
 - `sql/schema.sql` — `movies` table + HNSW index on `embedding_half`, run manually in the Supabase SQL editor
 
-Catalog order, quotas, and the `psycopg2` gap in `create_index.py` are in [docs/catalog.md](../docs/catalog.md). CI uses Python 3.12 (`requires-python >= 3.11`), `ruff check app`, and `pytest`.
+Catalog order, quotas, and the `psycopg2` gap in `create_index.py` are in [docs/catalog.md](../docs/catalog.md). CI uses Python 3.12 (`requires-python >= 3.11`), `ruff check app` (not `tests/`), and the same `pytest` invocation, including the 75% gate.
 
 ## Connection budget
 

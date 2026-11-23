@@ -16,7 +16,7 @@ Environment variables (from .env):
 Exit codes:
     0: Success (popularity updated)
     1: TMDB API error (keep existing shelf, no DB changes)
-    2: Database error (partial failure)
+    2: update_popularity raised (bad release_date writes nothing; a stale-reset failure can leave new scores committed)
 
 Note:
     This script runs in GitHub Actions and cannot bust Railway's in-memory cache.

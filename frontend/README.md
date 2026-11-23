@@ -16,8 +16,11 @@ npm run test:coverage # vitest with coverage report
 Set `VITE_API_URL` in `.env.local` (see `.env.example`) to point at a running
 backend — defaults to `http://localhost:8000`.
 
-CI uses Node 24. Vitest sets `NODE_OPTIONS=--no-experimental-webstorage` in
+CI uses Node 24 and runs `npm test`. Vitest sets `NODE_OPTIONS=--no-experimental-webstorage` in
 `vite.config.ts` so Node's built-in `localStorage` does not shadow jsdom.
+`npm run test:coverage` is the command that applies the thresholds in that
+file: statements 70, functions 70, lines 70, branches 65. CI does not run it,
+so a drop under those numbers still leaves the workflow green.
 
 ## Search flow
 
