@@ -49,7 +49,7 @@ original implementation plan.
 - **Embeddings:** OpenAI `text-embedding-3-small`
 - **Query expansion + reranking:** Claude Haiku (Anthropic)
 - **Frontend:** React + TypeScript + Vite
-- **Observability:** Datadog APM + LLM Observability
+- **Observability:** Datadog LLM Observability. Production starts agentless when `DD_TRACE_ENABLED=true` and `DD_API_KEY` is set, and that mode turns APM export off.
 - **Hosting:** Vercel (frontend), Railway (backend)
 
 ## Load testing
@@ -68,8 +68,9 @@ the Locust harness is in [backend/loadtest/](backend/loadtest/).
 - A cache miss is still slower than the 3s p95 target. Rerank is most of
   that time; stage timings and the load-test method are in
   [docs/STRESS_TEST.md](docs/STRESS_TEST.md).
-- No enforced coverage threshold yet; `rerank.py` and `embeddings.py` have
-  thinner test coverage than the rest of the backend.
+- Frontend coverage thresholds are not on the CI path. `vite.config.ts`
+  applies them only for `npm run test:coverage` (statements 70, functions 70,
+  lines 70, branches 65). Backend `pytest` already fails under 75% of `app`.
 - No end-to-end tests (component + unit coverage only).
 
 ## License

@@ -41,5 +41,5 @@ jobs:
         run: |
           echo "Ingest failed. Check logs for TMDB/DB errors."
           echo "A TMDB error leaves the database unchanged."
-          echo "A database error can leave new popularity scores committed. Re-run the job to finish clearing stale scores."
+          echo "Exit 2 is update_popularity raising. A bad release_date or a rolled-back score transaction writes nothing. A stale-reset failure after that transaction commits leaves the new scores in place. Re-run the job to finish clearing stale scores."
           echo "Railway's in-memory shelf still refreshes on its own schedule."
